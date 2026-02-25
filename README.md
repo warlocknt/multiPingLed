@@ -8,9 +8,7 @@
 Lightweight Windows tray utility for monitoring multiple hosts via ICMP (ping) with LED-style status indicators.
 
 ---
-
-🇷🇺 [Русская версия](#русская-версия)  
-
+🇬🇧 [English version](#english-version)
 ---
 
 # Русская версия
@@ -153,10 +151,9 @@ GNU General Public License v3 (GPLv3)
 - Разработано с использованием Lazarus IDE и Free Pascal
 - Вдохновлено необходимостью мониторинга сетевой инфраструктуры
 
-
-🇬🇧 [English version](#english-version)
-
 # English version
+
+🇷🇺 [Русская версия](#русская-версия)  
 
 multiPingLed — lightweight Windows tray utility for monitoring multiple hosts via ICMP (ping) with LED-style status indicators.
 
@@ -271,11 +268,13 @@ To add a new language:
 
 1. Create file `lang\[lang_code].txt`
 2. Add lines in format:
+   ```
+   code=[lang_code]
+   name=[Language name]
 
-code=[lang_code]
-name=[Language name]
+   key=value
 
-key=value
+   ```
 
 3. Restart the app
 
