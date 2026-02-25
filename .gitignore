@@ -1,0 +1,60 @@
+# Lazarus / FreePascal
+*.ppu
+*.o
+*.a
+*.res
+*.compiled
+*.cfg
+*.~lpi
+*.~lpr
+*.~lfm
+*.~pas
+*.exe
+*.dll
+*.so
+*.dylib
+*.obj
+*.manifest
+
+# Lazarus IDE / backup files
+*.bak
+*.tmp
+*.lpi~
+*.lpr~
+*.lfm~
+*.pas~
+*.cache
+*.history
+
+# FPC / Lazarus generated
+*.ppu
+*.ppc
+*.ppu.*
+*.o
+*.a
+*.compiled
+*.res
+*.dbg
+
+# Debug / Release folders
+/bin/
+/lib/
+/obj/
+/build/
+/output/
+/backup/
+/tests/
+
+# Operating system files
+.DS_Store
+Thumbs.db
+desktop.ini
+
+# Logs
+*.log
+
+# multiPingLed config (опционально)
+# *.ini
+
+# Screenshots / временные ресурсы (опционально)
+/promts/*

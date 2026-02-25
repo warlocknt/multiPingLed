@@ -1,0 +1,286 @@
+object SettingsForm: TSettingsForm
+  Left = 0
+  Height = 340
+  Top = 0
+  Width = 550
+  BorderStyle = bsDialog
+  Caption = 'Settings'
+  ClientHeight = 340
+  ClientWidth = 550
+  Position = poScreenCenter
+  LCLVersion = '4.4.0.0'
+  OnCreate = FormCreate
+  OnShow = FormShow
+  object PageControl: TPageControl
+    Left = 4
+    Height = 258
+    Top = 4
+    Width = 542
+    ActivePage = GroupsTab
+    Align = alClient
+    BorderSpacing.Around = 4
+    TabIndex = 1
+    TabOrder = 0
+    object NodesTab: TTabSheet
+      Caption = 'Nodes'
+      ClientHeight = 230
+      ClientWidth = 534
+      object NodeMainPanel: TPanel
+        Left = 0
+        Height = 230
+        Top = 0
+        Width = 534
+        Align = alClient
+        BevelOuter = bvNone
+        ClientHeight = 230
+        ClientWidth = 534
+        TabOrder = 0
+        object NodeListPanel: TPanel
+          Left = 0
+          Height = 230
+          Top = 0
+          Width = 434
+          Align = alClient
+          BevelOuter = bvNone
+          ClientHeight = 230
+          ClientWidth = 434
+          TabOrder = 0
+          object NodesList: TListView
+            Left = 0
+            Height = 230
+            Top = 0
+            Width = 434
+            Align = alClient
+            Columns = <            
+              item
+                Caption = 'Name'
+                Width = 150
+              end            
+              item
+                Caption = 'Host'
+                Width = 150
+              end            
+              item
+                Caption = 'Interval'
+                Width = 70
+              end            
+              item
+                Caption = 'Timeout'
+                Width = 70
+              end>
+            ReadOnly = True
+            RowSelect = True
+            TabOrder = 0
+            ViewStyle = vsReport
+            OnSelectItem = NodesListSelectItem
+          end
+        end
+        object NodeButtonsPanel: TPanel
+          Left = 434
+          Height = 230
+          Top = 0
+          Width = 100
+          Align = alRight
+          BevelOuter = bvNone
+          ClientHeight = 230
+          ClientWidth = 100
+          TabOrder = 1
+          object btnAddNode: TButton
+            Left = 8
+            Height = 25
+            Top = 8
+            Width = 85
+            Caption = 'Add node'
+            TabOrder = 0
+            OnClick = btnAddNodeClick
+          end
+          object btnEditNode: TButton
+            Left = 8
+            Height = 25
+            Top = 40
+            Width = 85
+            Caption = 'Edit node'
+            Enabled = False
+            TabOrder = 1
+            OnClick = btnEditNodeClick
+          end
+          object btnDeleteNode: TButton
+            Left = 8
+            Height = 25
+            Top = 72
+            Width = 85
+            Caption = 'Delete node'
+            Enabled = False
+            TabOrder = 2
+            OnClick = btnDeleteNodeClick
+          end
+        end
+      end
+    end
+    object GroupsTab: TTabSheet
+      Caption = 'Groups'
+      ClientHeight = 230
+      ClientWidth = 534
+      object GroupMainPanel: TPanel
+        Left = 0
+        Height = 230
+        Top = 0
+        Width = 534
+        Align = alClient
+        BevelOuter = bvNone
+        ClientHeight = 230
+        ClientWidth = 534
+        TabOrder = 0
+        object GroupListPanel: TPanel
+          Left = 0
+          Height = 230
+          Top = 0
+          Width = 434
+          Align = alClient
+          BevelOuter = bvNone
+          ClientHeight = 230
+          ClientWidth = 434
+          TabOrder = 0
+          object GroupsList: TListView
+            Left = 0
+            Height = 230
+            Top = 0
+            Width = 434
+            Align = alClient
+            Columns = <            
+              item
+                Caption = 'Name'
+                Width = 200
+              end            
+              item
+                Caption = 'Type'
+                Width = 80
+              end            
+              item
+                Caption = 'Nodes'
+                Width = 150
+              end>
+            ReadOnly = True
+            RowSelect = True
+            TabOrder = 0
+            ViewStyle = vsReport
+            OnSelectItem = GroupsListSelectItem
+          end
+        end
+        object GroupButtonsPanel: TPanel
+          Left = 434
+          Height = 230
+          Top = 0
+          Width = 100
+          Align = alRight
+          BevelOuter = bvNone
+          ClientHeight = 230
+          ClientWidth = 100
+          TabOrder = 1
+          object btnAddGroup: TButton
+            Left = 8
+            Height = 25
+            Top = 8
+            Width = 85
+            Caption = 'Add group'
+            TabOrder = 0
+            OnClick = btnAddGroupClick
+          end
+          object btnEditGroup: TButton
+            Left = 8
+            Height = 25
+            Top = 40
+            Width = 85
+            Caption = 'Edit group'
+            Enabled = False
+            TabOrder = 1
+            OnClick = btnEditGroupClick
+          end
+          object btnDeleteGroup: TButton
+            Left = 8
+            Height = 25
+            Top = 72
+            Width = 85
+            Caption = 'Delete group'
+            Enabled = False
+            TabOrder = 2
+            OnClick = btnDeleteGroupClick
+          end
+        end
+      end
+    end
+  end
+  object SettingsFormButtonsPanel: TPanel
+    Left = 0
+    Height = 74
+    Top = 266
+    Width = 550
+    Align = alBottom
+    ClientHeight = 74
+    ClientWidth = 550
+    TabOrder = 1
+    object btnApply: TButton
+      Left = 360
+      Height = 25
+      Top = 40
+      Width = 85
+      Anchors = [akRight, akBottom]
+      Caption = 'Apply'
+      Default = True
+      TabOrder = 0
+      OnClick = btnApplyClick
+    end
+    object btnCancel: TButton
+      Left = 455
+      Height = 25
+      Top = 40
+      Width = 85
+      Anchors = [akRight, akBottom]
+      Cancel = True
+      Caption = 'Cancel'
+      TabOrder = 1
+      OnClick = btnCancelClick
+    end
+    object btnImportNodes: TButton
+      Left = 8
+      Height = 25
+      Top = 40
+      Width = 85
+      Anchors = [akLeft, akBottom]
+      Caption = 'Import'
+      TabOrder = 2
+      OnClick = btnImportNodesClick
+    end
+    object btnExportNodes: TButton
+      Left = 96
+      Height = 25
+      Top = 40
+      Width = 85
+      Anchors = [akLeft, akBottom]
+      Caption = 'Export'
+      TabOrder = 3
+      OnClick = btnExportNodesClick
+    end
+    object cbSelectLanguage: TComboBox
+      Left = 112
+      Height = 21
+      Top = 8
+      Width = 100
+      ItemHeight = 15
+      Items.Strings = (
+        'English'
+        'Russian'
+      )
+      Style = csOwnerDrawFixed
+      TabOrder = 4
+      OnChange = cbSelectLanguageChange
+    end
+    object lLang: TLabel
+      Left = 24
+      Height = 15
+      Top = 8
+      Width = 55
+      Caption = 'Language:'
+    end
+  end
+end

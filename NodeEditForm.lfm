@@ -1,0 +1,88 @@
+object NodeEditForm: TNodeEditForm
+  Left = 0
+  Top = 0
+  BorderStyle = bsDialog
+  Caption = 'Node'
+  ClientHeight = 180
+  ClientWidth = 350
+  Position = poScreenCenter
+  object lblName: TLabel
+    Left = 8
+    Top = 12
+    Width = 31
+    Height = 13
+    Caption = 'Name:'
+  end
+  object lblHost: TLabel
+    Left = 8
+    Top = 42
+    Width = 26
+    Height = 13
+    Caption = 'Host:'
+  end
+  object lblInterval: TLabel
+    Left = 8
+    Top = 72
+    Width = 70
+    Height = 13
+    Caption = 'Interval (ms):'
+  end
+  object lblTimeout: TLabel
+    Left = 8
+    Top = 102
+    Width = 68
+    Height = 13
+    Caption = 'Timeout (ms):'
+  end
+  object edName: TEdit
+    Left = 100
+    Top = 8
+    Width = 230
+    Height = 21
+    TabOrder = 0
+    Text = 'New Node'
+  end
+  object edHost: TEdit
+    Left = 100
+    Top = 38
+    Width = 230
+    Height = 21
+    TabOrder = 1
+  end
+  object edInterval: TEdit
+    Left = 100
+    Top = 68
+    Width = 100
+    Height = 21
+    TabOrder = 2
+    Text = '5000'
+  end
+  object edTimeout: TEdit
+    Left = 100
+    Top = 98
+    Width = 100
+    Height = 21
+    TabOrder = 3
+    Text = '2000'
+  end
+  object btnOK: TButton
+    Left = 165
+    Top = 140
+    Width = 75
+    Height = 25
+    Caption = 'OK'
+    Default = True
+    ModalResult = 1
+    TabOrder = 4
+  end
+  object btnCancel: TButton
+    Left = 255
+    Top = 140
+    Width = 75
+    Height = 25
+    Cancel = True
+    Caption = 'Cancel'
+    ModalResult = 2
+    TabOrder = 5
+  end
+end

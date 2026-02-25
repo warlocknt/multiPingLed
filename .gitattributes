@@ -1,0 +1,6 @@
+*.pas text eol=lf
+*.lpr text eol=lf
+*.lfm text eol=lf
+*.md text eol=lf
+*.txt text eol=lf
+*.bat text eol=crlf
