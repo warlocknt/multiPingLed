@@ -10,7 +10,6 @@ Lightweight Windows tray utility for monitoring multiple hosts via ICMP (ping) w
 ---
 
 🇷🇺 [Русская версия](#русская-версия)  
-🇬🇧 [English version](#english-version)
 
 ---
 
@@ -38,14 +37,6 @@ multiPingLed — лёгкая утилита для мониторинга не�
 - GUI создаётся программно при старте
 
 ---
-
-## 📸 Screenshots
-
-*(Добавьте изображения в папку `/screenshots` и раскомментируйте блок ниже)*
-
-```md
-![Tray](screenshots/tray.png)
-![Tooltip](screenshots/tooltip.png)
 
 ## Особенности
 
@@ -161,3 +152,145 @@ GNU General Public License v3 (GPLv3)
 
 - Разработано с использованием Lazarus IDE и Free Pascal
 - Вдохновлено необходимостью мониторинга сетевой инфраструктуры
+
+
+🇬🇧 [English version](#english-version)
+
+# English version
+
+multiPingLed — lightweight Windows tray utility for monitoring multiple hosts via ICMP (ping) with LED-style status indicators.
+
+Developed in **FreePascal / Lazarus (LCL)**.  
+No external dependencies required.
+
+[⬆ Back to top](#multipingled)
+
+---
+
+## ✨ Features
+
+- Monitor multiple hosts
+- Group hosts
+- Dynamic tray icon (LED indicators)
+- Multi-line tooltip (for 3x3 groups only host names are shown)
+- Configuration in INI format
+- Configuration validation on startup
+- Export / import configuration
+- Separate console test project
+- GUI created programmatically at startup
+
+---
+
+## Details
+
+- **System tray display**: Icons with LED indicators for host status
+- **Host groups**:
+- Single: 1 host
+- 2x2 Grid: 2-4 hosts
+- 3x3 Grid: 5-9 hosts (tooltip only shows host names)
+- **Customizable parameters**:
+- Ping interval (ms)
+- Response timeout
+- Host name and address
+- **Multilanguage support**: Russian, English, German, French, Kazakh
+- **Export/Import configuration**: INI format
+- **Automatic recovery**: App creates default config on first run
+
+## Requirements
+
+- Windows 7/8/10/11
+
+To build from source:
+- Lazarus IDE
+- Free Pascal Compiler (FPC)
+
+## Installation
+
+### Prebuilt executable
+
+1. Download the latest release from Releases section
+2. Extract archive to any folder
+3. Run `multiPingLed.exe`
+
+### Build from source
+
+1. Open the project in Lazarus IDE
+2. Compile the project (Ctrl+F9)
+3. Executable will appear in the project folder
+
+## Usage
+
+### First launch
+
+On first run the app automatically creates a configuration with 14 preconfigured DNS servers:
+- Cloudflare (1.1.1.1, 1.0.0.1)
+- Google (8.8.8.8, 8.8.4.4)
+- Quad9 (9.9.9.9, 149.112.112.112)
+- OpenDNS (208.67.222.222, 208.67.220.220)
+- And others
+
+### Controls
+
+- **Right click on tray icon** — open menu (Settings / Exit)
+- **Left click on tray icon** — show tooltip with host status
+
+### Configuration
+
+1. Right-click tray icon
+2. Select "Settings"
+3. Hosts tab:
+- Add, edit, remove hosts
+- Set name, IP/domain, interval, timeout
+4. Groups tab:
+- Create host groups
+- Choose group type (Single, 2x2, 3x3)
+- Select hosts for group (2-4 for 2x2, 5-9 for 3x3)
+5. Choose UI language (Russian / English)
+6. Click "Apply" to save
+
+### LED colors
+
+- **Green** — host is up
+- **Red** — host is down
+- **Gray/Yellow** — waiting for first ping
+
+## Configuration files
+
+- `config.ini` — configuration file (created automatically)
+- `lang\english.txt` — English translation
+- `lang\russian.txt` — Russian translation
+- `lang\german.txt` — German translation
+- `lang\french.txt` — French translation
+- `lang\kazakh.txt` — Kazakh translation
+
+Config is saved at `%APPDATA%\multiPingLed\config.ini`
+
+## Localization
+
+To add a new language:
+
+1. Create file `lang\[lang_code].txt`
+2. Add lines in format:
+
+code=[lang_code]
+name=[Language name]
+
+key=value
+
+3. Restart the app
+
+## License
+
+Distributed under GNU General Public License v3 (GPLv3)
+
+Allowed:
+Commercial use  
+Forks  
+Modification  
+Redistribution  
+When distributing modified versions, source code must be provided and GPLv3 preserved.
+
+## Acknowledgements
+
+- Developed using Lazarus IDE and Free Pascal
+- Inspired by the need for network infrastructure monitoring
