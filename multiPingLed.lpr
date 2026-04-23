@@ -10,12 +10,13 @@ uses
   Interfaces,  // LCL интерфейс
   Forms,       // Формы LCL
   Dialogs,     // Для ShowMessage
+  SysUtils,    // для IncludeTrailingPathDelimiter
   AppCore, ConfigManager, GroupManager, IconRenderer, NodeManager, PingHelper,
-  SettingsForm, NodeEditForm, GroupEditForm, TrayController, LangManager;     // Ядро приложения
+  SettingsForm, NodeEditForm, GroupEditForm, TrayController, LangManager, AboutUnit;     // Ядро приложения
 
 var
   ConfigMgr: TConfigManager;
-  LangCode: string;
+  ConfigDir, LangDir, LangCode: string;
 
 {$R *.res}
 
@@ -25,11 +26,17 @@ begin
   // Инициализация приложения
   Application.Initialize;
 
+  //Получение пути к конфиг файлу
+  ConfigDir := GetEnvironmentVariable('APPDATA') + '\multiPingLed\config.ini';
+  GlobalConfigPath := ConfigDir;  // Устанавливаем глобальную переменную
+
   // Инициализация менеджера локализации
-  LangMgr.Initialize(Application.ExeName);
+  LangDir := IncludeTrailingPathDelimiter(ExtractFilePath(Application.ExeName)) + 'lang';
+  GlobalLangPath := LangDir;  // Устанавливаем глобальную переменную
+  LangMgr.Initialize( LangDir );
 
   // Загрузка сохраненного языка
-  ConfigMgr := TConfigManager.Create;
+  ConfigMgr := TConfigManager.Create('');
   try
     LangCode := ConfigMgr.GetLanguage;
     LangMgr.SetLanguage(LangCode);
@@ -39,7 +46,11 @@ begin
 
   // Инициализация ядра приложения (Singleton)
   TAppCore.Instance.Initialize;
-
-  // Запуск главного цикла приложения
-  Application.Run;
+  try
+    // Запуск главного цикла приложения
+    Application.Run;
+  finally
+    // Освобождаем ядро приложения
+    TAppCore.ReleaseInstance;
+  end;
 end.

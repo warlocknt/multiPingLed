@@ -1,0 +1,102 @@
+object AboutForm: TAboutForm
+  Left = 350
+  Height = 324
+  Top = 250
+  Width = 249
+  AlphaBlend = True
+  BorderIcons = [biSystemMenu]
+  BorderStyle = bsSingle
+  Caption = 'multiPingLed'
+  ClientHeight = 324
+  ClientWidth = 249
+  DesignTimePPI = 120
+  FormStyle = fsStayOnTop
+  Position = poScreenCenter
+  LCLVersion = '4.6.0.0'
+  OnCreate = FormCreate
+  object StatusBarAbout: TStatusBar
+    Left = 0
+    Height = 29
+    Top = 295
+    Width = 249
+    Panels = <    
+      item
+        Alignment = taCenter
+        Text = 'Copyright© 2026 warlocknt'
+        Width = 50
+      end>
+    SimplePanel = False
+  end
+  object LabelTg: TLabel
+    AnchorSideRight.Side = asrCenter
+    AnchorSideBottom.Side = asrBottom
+    Left = 56
+    Height = 20
+    Top = 252
+    Width = 65
+    Alignment = taCenter
+    Anchors = [akRight, akBottom]
+    Caption = 'Telegram:'
+    ParentFont = False
+    OnClick = LabelTgLNKClick
+    OnMouseLeave = LabelTgMouseLeave
+    OnMouseMove = LabelTgMouseMove
+  end
+  object LabelTgLNK: TLabel
+    AnchorSideRight.Side = asrCenter
+    AnchorSideBottom.Side = asrBottom
+    Left = 124
+    Height = 20
+    Top = 252
+    Width = 78
+    Alignment = taCenter
+    Anchors = [akRight, akBottom]
+    Caption = '@warlocknt'
+    ParentFont = False
+    OnClick = LabelTgLNKClick
+    OnMouseEnter = LabelMouseEnter
+    OnMouseLeave = LabelMouseLeave
+    OnMouseMove = LabelMouseMove
+  end
+  object LabelGit: TLabel
+    AnchorSideRight.Side = asrCenter
+    AnchorSideBottom.Side = asrBottom
+    Left = 59
+    Height = 20
+    Top = 231
+    Width = 47
+    Alignment = taCenter
+    Anchors = [akRight, akBottom]
+    Caption = 'Github:'
+    ParentFont = False
+    OnClick = LabelGitLNKClick
+    OnMouseLeave = LabelGitMouseLeave
+    OnMouseMove = LabelGitMouseMove
+  end
+  object LabelGitLNK: TLabel
+    AnchorSideRight.Side = asrCenter
+    AnchorSideBottom.Side = asrBottom
+    Left = 110
+    Height = 20
+    Top = 231
+    Width = 87
+    Alignment = taCenter
+    Anchors = [akRight, akBottom]
+    Caption = 'multiPingLed'
+    ParentColor = False
+    ParentFont = False
+    OnClick = LabelGitLNKClick
+    OnMouseEnter = LabelMouseEnter
+    OnMouseLeave = LabelMouseLeave
+    OnMouseMove = LabelMouseMove
+  end
+  object LUpdateStatus: TLabel
+    Left = 8
+    Height = 20
+    Top = 269
+    Width = 234
+    Alignment = taCenter
+    Anchors = [akLeft, akRight]
+    AutoSize = False
+  end
+end

@@ -5,7 +5,7 @@ unit LangManager;
 interface
 
 uses
-  Classes, SysUtils;
+  Classes, SysUtils, ConfigManager;
 
 type
   { Language info record }
@@ -31,8 +31,8 @@ type
     constructor Create;
     destructor Destroy; override;
 
-    // Initialize with exe path
-    procedure Initialize(const ExePath: string);
+    // Initialize with lang dir path
+    procedure Initialize(const LangPath: string);
 
     // Get translated string by key
     function GetString(const Key: string): string;
@@ -77,11 +77,14 @@ begin
   inherited;
 end;
 
-procedure TLangManager.Initialize(const ExePath: string);
+procedure TLangManager.Initialize(const LangPath: string);
 var
   Idx: Integer;
 begin
-  FLangDir := IncludeTrailingPathDelimiter(ExtractFilePath(ExePath)) + 'lang';
+  if LangPath <> '' then
+    FLangDir := LangPath
+  else
+    FLangDir := GlobalLangPath;
 
   // Ensure lang directory exists
   if not DirectoryExists(FLangDir) then
@@ -171,6 +174,8 @@ begin
     Lines.Add('label_language=Language:');
     Lines.Add('menu_settings=Settings');
     Lines.Add('menu_exit=Exit');
+    Lines.Add('menu_about=About');
+    Lines.Add('about_close=Close');
     Lines.SaveToFile(FileName);
   finally
     Lines.Free;
@@ -233,6 +238,8 @@ begin
     Lines.Add('label_language=Язык:');
     Lines.Add('menu_settings=Настройки');
     Lines.Add('menu_exit=Выход');
+    Lines.Add('menu_about=О программе');
+    Lines.Add('about_close=Закрыть');
     Lines.SaveToFile(FileName);
   finally
     Lines.Free;
@@ -295,6 +302,8 @@ begin
     Lines.Add('label_language=Sprache:');
     Lines.Add('menu_settings=Einstellungen');
     Lines.Add('menu_exit=Beenden');
+    Lines.Add('menu_about=Über');
+    Lines.Add('about_close=Schließen');
     Lines.SaveToFile(FileName);
   finally
     Lines.Free;
@@ -357,6 +366,8 @@ begin
     Lines.Add('label_language=Langue:');
     Lines.Add('menu_settings=Paramètres');
     Lines.Add('menu_exit=Quitter');
+    Lines.Add('menu_about=À propos');
+    Lines.Add('about_close=Fermer');
     Lines.SaveToFile(FileName);
   finally
     Lines.Free;
@@ -419,6 +430,8 @@ begin
     Lines.Add('label_language=Тіл:');
     Lines.Add('menu_settings=Параметрлер');
     Lines.Add('menu_exit=Шығу');
+    Lines.Add('menu_about=Бағдарлама туралы');
+    Lines.Add('about_close=Жабу');
     Lines.SaveToFile(FileName);
   finally
     Lines.Free;
@@ -436,20 +449,23 @@ begin
 
   if FindFirst(FLangDir + '\*.txt', faAnyFile, SearchRec) = 0 then
   begin
-    repeat
-      if (SearchRec.Attr and faDirectory) = 0 then
-      begin
-        if ParseLanguageFile(FLangDir + '\' + SearchRec.Name, LangCode, LangName) then
+    try
+      repeat
+        if (SearchRec.Attr and faDirectory) = 0 then
         begin
-          Inc(Count);
-          SetLength(FAvailableLanguages, Count);
-          FAvailableLanguages[Count - 1].Code := LangCode;
-          FAvailableLanguages[Count - 1].Name := LangName;
-          FAvailableLanguages[Count - 1].FileName := FLangDir + '\' + SearchRec.Name;
+          if ParseLanguageFile(FLangDir + '\' + SearchRec.Name, LangCode, LangName) then
+          begin
+            Inc(Count);
+            SetLength(FAvailableLanguages, Count);
+            FAvailableLanguages[Count - 1].Code := LangCode;
+            FAvailableLanguages[Count - 1].Name := LangName;
+            FAvailableLanguages[Count - 1].FileName := FLangDir + '\' + SearchRec.Name;
+          end;
         end;
-      end;
-    until FindNext(SearchRec) <> 0;
-    FindClose(SearchRec);
+      until FindNext(SearchRec) <> 0;
+    finally
+      FindClose(SearchRec);
+    end;
   end;
 end;
 

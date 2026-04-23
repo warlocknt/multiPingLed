@@ -92,20 +92,26 @@ var
   Addr: PDWORD;
 begin
   Result := 0;
-  
-  // Initialize Winsock if not already done
-  if not WSAInitialized then
-  begin
-    if WSAStartup($0202, WSAData) <> 0 then Exit;
-    WSAInitialized := True;
-  end;
-  
+  if not WSAInitialized then Exit;
   HostEnt := GetHostByName(PChar(Host));
   if HostEnt = nil then Exit;
-  
   Addr := PDWORD(HostEnt^.h_addr^);
   if Addr <> nil then
     Result := Addr^;
+end;
+
+procedure CleanupPingHelper;
+begin
+  if hIcmp <> INVALID_HANDLE_VALUE then
+  begin
+    IcmpCloseHandle(hIcmp);
+    hIcmp := INVALID_HANDLE_VALUE;
+  end;
+  if WSAInitialized then
+  begin
+    WSACleanup;
+    WSAInitialized := False;
+  end;
 end;
 
 function PingHost(const Host: string; TimeoutMs: Integer): TPingResult;
@@ -120,15 +126,10 @@ begin
   Result.ResponseTime := -1;
   Result.ErrorMessage := '';
 
-  // Создаем ICMP handle при первом вызове
   if hIcmp = INVALID_HANDLE_VALUE then
   begin
-    hIcmp := IcmpCreateFile;
-    if hIcmp = INVALID_HANDLE_VALUE then
-    begin
-      Result.ErrorMessage := 'Failed to create ICMP handle';
-      Exit;
-    end;
+    Result.ErrorMessage := 'Failed to create ICMP handle';
+    Exit;
   end;
 
   // Получаем IP адрес хоста
@@ -185,5 +186,14 @@ begin
     FreeMem(ReplyBuffer);
   end;
 end;
+
+initialization
+  // Инициализируем один раз до старта потоков — исключает гонку между потоками
+  if WSAStartup($0202, WSAData) = 0 then
+    WSAInitialized := True;
+  hIcmp := IcmpCreateFile;
+
+finalization
+  CleanupPingHelper;
 
 end.

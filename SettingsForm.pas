@@ -5,8 +5,8 @@ unit SettingsForm;
 interface
 
 uses
-  Classes, SysUtils, Forms, Controls, Graphics, StdCtrls, ExtCtrls, Dialogs, ComCtrls, CheckLst,
-  ConfigManager, NodeEditForm, GroupEditForm, LangManager;
+  Classes, SysUtils, Forms, Controls, Graphics, StdCtrls, ExtCtrls, Dialogs,
+  ComCtrls, Menus, ConfigManager, NodeEditForm, GroupEditForm, LangManager;
 
 type
 
@@ -14,7 +14,11 @@ type
 
   TSettingsForm = class(TForm)
     cbSelectLanguage: TComboBox;
+    cbBaloonHint: TCheckBox;
+    eCommandExec: TEdit;
+    lCommandExec: TLabel;
     lLang: TLabel;
+    Memo1: TMemo;
     PageControl: TPageControl;
     NodesTab: TTabSheet;
     GroupsTab: TTabSheet;
@@ -37,6 +41,7 @@ type
     btnApply: TButton;
     btnCancel: TButton;
     SettingsFormButtonsPanel: TPanel;
+    TabSheet1: TTabSheet;
 
     procedure FormCreate(Sender: TObject);
     procedure FormShow(Sender: TObject);
@@ -51,6 +56,7 @@ type
     procedure btnCancelClick(Sender: TObject);
     procedure btnImportNodesClick(Sender: TObject);
     procedure btnExportNodesClick(Sender: TObject);
+    procedure GroupsListItemChecked(Sender: TObject; Item: TListItem);
     procedure NodesListSelectItem(Sender: TObject; Item: TListItem; Selected: Boolean);
     procedure GroupsListSelectItem(Sender: TObject; Item: TListItem; Selected: Boolean);
   private
@@ -65,11 +71,13 @@ type
     procedure ApplyLocalization;
     procedure RefreshNodesList;
     procedure RefreshGroupsList;
-    procedure LoadLanguageSelector;
+    function IsHostExists(const Host: string; ExcludeIndex: Integer = -1): Boolean;
     function GetNextNodeId: Integer;
     function GetNextGroupId: Integer;
-    function HostExists(const Host: string; ExcludeIndex: Integer): Boolean;
-    function IsNodeInGroup(NodeId: Integer; const Group: TNodeGroup): Boolean;
+    procedure LoadNodeCommandFields;
+    procedure SaveNodeCommandFields;
+    procedure eCommandChange(Sender: TObject);
+    procedure LoadLanguageSelector;
   public
     procedure SetConfig(const Config: TAppConfig);
     property OnApply: TNotifyEvent read FOnApply write FOnApply;
@@ -81,19 +89,37 @@ implementation
 
 {$R *.lfm}
 
+uses Windows;
+
+procedure SettingsDebugLog(const Msg: string);
+begin
+  OutputDebugString(PChar('multiPingLed[Settings]: ' + Msg));
+end;
+
 procedure TSettingsForm.FormCreate(Sender: TObject);
 begin
+  SettingsDebugLog('FormCreate');
   FLoading := True;
   SetupEvents;
   FModified := False;
   ApplyLocalization;
   FLoading := False;
+  SettingsDebugLog('FormCreate done');
+  PageControl.TabIndex :=0 ;
 end;
 
 procedure TSettingsForm.FormShow(Sender: TObject);
 begin
-  LoadLanguageSelector;
-  ApplyLocalization;
+  SettingsDebugLog('FormShow');
+  FLoading := True;
+  try
+    LoadLanguageSelector;
+    if Assigned(FConfigManager) and Assigned(cbBaloonHint) then
+      cbBaloonHint.Checked := FConfigManager.GetBalloonHintEnabled;
+    ApplyLocalization;
+  finally
+    FLoading := False;
+  end;
 end;
 
 procedure TSettingsForm.SetupEvents;
@@ -103,6 +129,9 @@ begin
     NodesList.OnSelectItem := @NodesListSelectItem;
   if Assigned(GroupsList) then
     GroupsList.OnSelectItem := @GroupsListSelectItem;
+  // Command fields
+  if Assigned(eCommandExec) then
+    eCommandExec.OnChange := @eCommandChange;
 end;
 
 procedure TSettingsForm.LoadLanguageSelector;
@@ -210,14 +239,24 @@ begin
   // Language selector
   if Assigned(lLang) then
     lLang.Caption := _('label_language');
+
+  // Settings tab (3rd tab)
+  if Assigned(TabSheet1) then
+    TabSheet1.Caption := _('tab_settings');
+  if Assigned(lCommandExec) then
+    lCommandExec.Caption := _('label_command_on_change');
+  if Assigned(cbBaloonHint) then
+    cbBaloonHint.Caption := _('label_balloon_hint');
 end;
 
 procedure TSettingsForm.SetConfig(const Config: TAppConfig);
 begin
+  SettingsDebugLog('SetConfig: ' + IntToStr(Length(Config.Nodes)) + ' nodes, ' + IntToStr(Length(Config.Groups)) + ' groups');
   FConfig := Config;
   RefreshNodesList;
   RefreshGroupsList;
   ApplyLocalization;
+  SettingsDebugLog('SetConfig done');
 end;
 
 procedure TSettingsForm.RefreshNodesList;
@@ -252,6 +291,7 @@ begin
   begin
     Item := GroupsList.Items.Add;
     Item.Caption := FConfig.Groups[I].Name;
+    Item.Checked := FConfig.Groups[I].Enabled;
 
     case FConfig.Groups[I].GroupType of
       gtSingle: TypeStr := _('type_single');
@@ -280,6 +320,43 @@ procedure TSettingsForm.NodesListSelectItem(Sender: TObject; Item: TListItem; Se
 begin
   btnEditNode.Enabled := Selected;
   btnDeleteNode.Enabled := Selected;
+  // Загружаем команды выделенного узла
+  LoadNodeCommandFields;
+end;
+
+procedure TSettingsForm.LoadNodeCommandFields;
+var
+  SelIndex: Integer;
+begin
+  if (NodesList.Selected = nil) or (NodesList.Selected.Index < 0) then
+  begin
+    if Assigned(eCommandExec) then eCommandExec.Text := '';
+    Exit;
+  end;
+  SelIndex := NodesList.Selected.Index;
+  if (SelIndex >= 0) and (SelIndex < Length(FConfig.Nodes)) then
+  begin
+    if Assigned(eCommandExec) then eCommandExec.Text := FConfig.Nodes[SelIndex].Command;
+  end;
+end;
+
+procedure TSettingsForm.SaveNodeCommandFields;
+var
+  SelIndex: Integer;
+begin
+  if (NodesList.Selected = nil) or (NodesList.Selected.Index < 0) then Exit;
+  SelIndex := NodesList.Selected.Index;
+  if (SelIndex >= 0) and (SelIndex < Length(FConfig.Nodes)) then
+  begin
+    if Assigned(eCommandExec) then FConfig.Nodes[SelIndex].Command := Trim(eCommandExec.Text);
+  end;
+end;
+
+procedure TSettingsForm.eCommandChange(Sender: TObject);
+begin
+  if FLoading then Exit;
+  SaveNodeCommandFields;
+  FModified := True;
 end;
 
 procedure TSettingsForm.GroupsListSelectItem(Sender: TObject; Item: TListItem; Selected: Boolean);
@@ -312,7 +389,7 @@ begin
   end;
 end;
 
-function TSettingsForm.HostExists(const Host: string; ExcludeIndex: Integer): Boolean;
+function TSettingsForm.IsHostExists(const Host: string; ExcludeIndex: Integer): Boolean;
 var
   I: Integer;
 begin
@@ -320,21 +397,6 @@ begin
   for I := 0 to High(FConfig.Nodes) do
   begin
     if (I <> ExcludeIndex) and (CompareText(FConfig.Nodes[I].Host, Host) = 0) then
-    begin
-      Result := True;
-      Exit;
-    end;
-  end;
-end;
-
-function TSettingsForm.IsNodeInGroup(NodeId: Integer; const Group: TNodeGroup): Boolean;
-var
-  I: Integer;
-begin
-  Result := False;
-  for I := 0 to High(Group.NodeIds) do
-  begin
-    if Group.NodeIds[I] = NodeId then
     begin
       Result := True;
       Exit;
@@ -579,6 +641,7 @@ var
   LangInfo: TLanguageInfo;
   LangCode: string;
 begin
+  SettingsDebugLog('btnApplyClick - applying config');
   // Use external ConfigManager if assigned, otherwise create new
   if Assigned(FConfigManager) then
   begin
@@ -586,6 +649,7 @@ begin
 
     if not FConfigManager.ValidateConfig(ErrorMsg) then
     begin
+      SettingsDebugLog('Validation failed: ' + ErrorMsg);
       MessageDlg(_('title_error'), ErrorMsg, mtError, [mbOK], 0);
       Exit;
     end;
@@ -596,28 +660,38 @@ begin
     begin
       LangInfo := LangMgr.GetLanguageInfo(Idx);
       LangCode := LangInfo.Code;
-      
+
       // Apply language
       LangMgr.SetLanguage(LangCode);
       FConfigManager.SetLanguage(LangCode);
-      
+
       // Update tray menu
       if Assigned(FOnLanguageChanged) then
         FOnLanguageChanged(Self);
     end;
 
-    FConfigManager.SaveConfig;
+    // Сохраняем состояние чекбокса balloon hint
+    if Assigned(cbBaloonHint) then
+      FConfigManager.SetBalloonHintEnabled(cbBaloonHint.Checked);
 
+    SettingsDebugLog('Saving config');
+    FConfigManager.SaveConfig;
+    
     if Assigned(FOnApply) then
+    begin
+      SettingsDebugLog('Calling OnApply handler');
       FOnApply(Self);
+    end;
 
     FModified := False;
     ModalResult := mrOK;
+    SettingsDebugLog('Apply done');
   end;
 end;
 
 procedure TSettingsForm.btnCancelClick(Sender: TObject);
 begin
+  SettingsDebugLog('btnCancelClick');
   ModalResult := mrCancel;
 end;
 
@@ -634,7 +708,7 @@ begin
 
     if OpenDlg.Execute then
     begin
-      ConfigMgr := TConfigManager.Create;
+      ConfigMgr := TConfigManager.Create('');
       try
         if ConfigMgr.ImportConfig(OpenDlg.FileName, ErrorMsg) then
         begin
@@ -669,7 +743,7 @@ begin
 
     if SaveDlg.Execute then
     begin
-      ConfigMgr := TConfigManager.Create;
+      ConfigMgr := TConfigManager.Create('');
       try
         ConfigMgr.SetConfig(FConfig);
         ConfigMgr.ExportConfig(SaveDlg.FileName);
@@ -680,6 +754,20 @@ begin
     end;
   finally
     SaveDlg.Free;
+  end;
+end;
+
+procedure TSettingsForm.GroupsListItemChecked(Sender: TObject; Item: TListItem);
+var
+  Idx: Integer;
+begin
+  if FLoading then Exit;
+
+  Idx := Item.Index;
+  if (Idx >= 0) and (Idx <= High(FConfig.Groups)) then
+  begin
+    FConfig.Groups[Idx].Enabled := Item.Checked;
+    FModified := True;
   end;
 end;
 

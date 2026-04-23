@@ -24,7 +24,7 @@ class function TIconRenderer.GetStateColor(State: ConfigManager.TNodeState): TCo
 begin
   case State of
     nsUnknown: Result := clGray;
-    nsUp: Result := clGreen;
+    nsUp: Result := clLime;
     nsDown: Result := clRed;
   end;
 end;

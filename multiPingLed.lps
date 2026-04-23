@@ -3,22 +3,24 @@
   <ProjectSession>
     <PathDelim Value="\"/>
     <Version Value="12"/>
-    <BuildModes Active="Release"/>
+    <BuildModes Active="Debug"/>
     <Units>
       <Unit>
         <Filename Value="multiPingLed.lpr"/>
         <IsPartOfProject Value="True"/>
         <UnitName Value="MultiPingLed"/>
-        <EditorIndex Value="5"/>
-        <CursorPos X="27" Y="15"/>
-        <UsageCount Value="192"/>
+        <EditorIndex Value="9"/>
+        <TopLine Value="16"/>
+        <CursorPos X="26" Y="15"/>
+        <UsageCount Value="203"/>
         <Loaded Value="True"/>
       </Unit>
       <Unit>
         <Filename Value="PingHelper.pas"/>
         <IsPartOfProject Value="True"/>
-        <CursorPos X="16"/>
-        <UsageCount Value="192"/>
+        <TopLine Value="155"/>
+        <CursorPos X="5" Y="189"/>
+        <UsageCount Value="203"/>
         <Loaded Value="True"/>
       </Unit>
       <Unit>
@@ -28,62 +30,63 @@
         <HasResources Value="True"/>
         <ResourceBaseClass Value="Form"/>
         <EditorIndex Value="1"/>
-        <TopLine Value="204"/>
-        <CursorPos X="21" Y="219"/>
-        <UsageCount Value="192"/>
+        <TopLine Value="395"/>
+        <CursorPos X="37" Y="409"/>
+        <UsageCount Value="203"/>
         <Loaded Value="True"/>
         <LoadedDesigner Value="True"/>
       </Unit>
       <Unit>
         <Filename Value="AppCore.pas"/>
         <IsPartOfProject Value="True"/>
-        <EditorIndex Value="4"/>
-        <TopLine Value="193"/>
-        <CursorPos Y="225"/>
-        <UsageCount Value="192"/>
+        <EditorIndex Value="6"/>
+        <TopLine Value="376"/>
+        <CursorPos X="68" Y="376"/>
+        <UsageCount Value="203"/>
         <Loaded Value="True"/>
       </Unit>
       <Unit>
         <Filename Value="ConfigManager.pas"/>
         <IsPartOfProject Value="True"/>
-        <EditorIndex Value="-1"/>
-        <WindowIndex Value="-1"/>
-        <TopLine Value="-1"/>
-        <CursorPos X="-1" Y="-1"/>
-        <UsageCount Value="192"/>
+        <EditorIndex Value="3"/>
+        <TopLine Value="270"/>
+        <CursorPos X="5" Y="276"/>
+        <UsageCount Value="203"/>
+        <Loaded Value="True"/>
       </Unit>
       <Unit>
         <Filename Value="GroupManager.pas"/>
         <IsPartOfProject Value="True"/>
-        <EditorIndex Value="7"/>
-        <CursorPos X="32" Y="24"/>
-        <UsageCount Value="192"/>
+        <EditorIndex Value="12"/>
+        <TopLine Value="25"/>
+        <CursorPos X="5" Y="53"/>
+        <UsageCount Value="203"/>
         <Loaded Value="True"/>
       </Unit>
       <Unit>
         <Filename Value="IconRenderer.pas"/>
         <IsPartOfProject Value="True"/>
-        <EditorIndex Value="8"/>
-        <CursorPos X="24" Y="117"/>
-        <UsageCount Value="192"/>
+        <EditorIndex Value="13"/>
+        <CursorPos X="27" Y="27"/>
+        <UsageCount Value="203"/>
         <Loaded Value="True"/>
       </Unit>
       <Unit>
         <Filename Value="NodeManager.pas"/>
         <IsPartOfProject Value="True"/>
-        <EditorIndex Value="-1"/>
-        <WindowIndex Value="-1"/>
-        <TopLine Value="-1"/>
-        <CursorPos X="-1" Y="-1"/>
-        <UsageCount Value="192"/>
+        <EditorIndex Value="7"/>
+        <TopLine Value="254"/>
+        <CursorPos X="38" Y="268"/>
+        <UsageCount Value="203"/>
+        <Loaded Value="True"/>
       </Unit>
       <Unit>
         <Filename Value="TrayController.pas"/>
         <IsPartOfProject Value="True"/>
-        <EditorIndex Value="6"/>
-        <TopLine Value="337"/>
-        <CursorPos X="46" Y="360"/>
-        <UsageCount Value="192"/>
+        <EditorIndex Value="10"/>
+        <TopLine Value="787"/>
+        <CursorPos X="15" Y="789"/>
+        <UsageCount Value="203"/>
         <Loaded Value="True"/>
       </Unit>
       <Unit>
@@ -92,143 +95,176 @@
         <ComponentName Value="GroupEditForm"/>
         <HasResources Value="True"/>
         <ResourceBaseClass Value="Form"/>
-        <EditorIndex Value="3"/>
-        <CursorPos X="19"/>
-        <UsageCount Value="188"/>
+        <EditorIndex Value="5"/>
+        <CursorPos Y="2"/>
+        <UsageCount Value="224"/>
         <Loaded Value="True"/>
         <LoadedDesigner Value="True"/>
       </Unit>
       <Unit>
-        <Filename Value="trayhintform.pas"/>
-        <UnitName Value="TrayHintForm"/>
-        <EditorIndex Value="-1"/>
-        <TopLine Value="7"/>
-        <CursorPos X="27" Y="41"/>
-        <UsageCount Value="22"/>
+        <Filename Value="aboutunit.pas"/>
+        <IsPartOfProject Value="True"/>
+        <ComponentName Value="AboutForm"/>
+        <HasResources Value="True"/>
+        <ResourceBaseClass Value="Form"/>
+        <UnitName Value="AboutUnit"/>
+        <EditorIndex Value="8"/>
+        <CursorPos X="10" Y="5"/>
+        <UsageCount Value="354"/>
+        <Loaded Value="True"/>
+        <LoadedDesigner Value="True"/>
       </Unit>
       <Unit>
         <Filename Value="LangManager.pas"/>
+        <EditorIndex Value="4"/>
+        <TopLine Value="480"/>
+        <CursorPos X="50" Y="489"/>
+        <UsageCount Value="108"/>
+        <Loaded Value="True"/>
+      </Unit>
+      <Unit>
+        <Filename Value="NodeEditForm.pas"/>
+        <ComponentName Value="NodeEditForm"/>
+        <HasResources Value="True"/>
+        <ResourceBaseClass Value="Form"/>
         <IsVisibleTab Value="True"/>
         <EditorIndex Value="2"/>
-        <TopLine Value="321"/>
-        <CursorPos X="86" Y="343"/>
-        <UsageCount Value="89"/>
+        <TopLine Value="96"/>
+        <CursorPos X="55" Y="115"/>
+        <UsageCount Value="151"/>
+        <Loaded Value="True"/>
+        <LoadedDesigner Value="True"/>
+      </Unit>
+      <Unit>
+        <Filename Value="C:\lazarus\components\lazutils\lazutilities.pas"/>
+        <UnitName Value="LazUtilities"/>
+        <EditorIndex Value="11"/>
+        <TopLine Value="66"/>
+        <CursorPos Y="71"/>
+        <UsageCount Value="43"/>
         <Loaded Value="True"/>
       </Unit>
     </Units>
-    <JumpHistory HistoryIndex="28">
+    <JumpHistory HistoryIndex="29">
       <Position>
-        <Filename Value="TrayController.pas"/>
-        <Caret Line="76" Column="54" TopLine="49"/>
+        <Filename Value="SettingsForm.pas"/>
+        <Caret Line="171" Column="32" TopLine="156"/>
+      </Position>
+      <Position>
+        <Filename Value="SettingsForm.pas"/>
+        <Caret Line="170" Column="32" TopLine="155"/>
+      </Position>
+      <Position>
+        <Filename Value="SettingsForm.pas"/>
+        <Caret Line="169" Column="32" TopLine="154"/>
       </Position>
       <Position>
         <Filename Value="TrayController.pas"/>
-        <Caret Line="19" Column="31"/>
+        <Caret Line="339" Column="41" TopLine="336"/>
       </Position>
       <Position>
         <Filename Value="TrayController.pas"/>
-        <Caret Line="22"/>
+        <Caret Line="355" Column="38" TopLine="339"/>
       </Position>
       <Position>
         <Filename Value="TrayController.pas"/>
-        <Caret Line="85" TopLine="65"/>
+        <Caret Line="410" Column="38" TopLine="394"/>
       </Position>
       <Position>
         <Filename Value="TrayController.pas"/>
-        <Caret Line="145" Column="36" TopLine="121"/>
+        <Caret Line="570" Column="36" TopLine="554"/>
+      </Position>
+      <Position>
+        <Filename Value="aboutunit.pas"/>
+        <Caret Line="78" Column="13" TopLine="72"/>
+      </Position>
+      <Position>
+        <Filename Value="AppCore.pas"/>
+        <Caret Line="535" Column="40" TopLine="530"/>
+      </Position>
+      <Position>
+        <Filename Value="AppCore.pas"/>
+        <Caret Line="10" Column="39"/>
+      </Position>
+      <Position>
+        <Filename Value="AppCore.pas"/>
+        <Caret Line="45" Column="27" TopLine="29"/>
+      </Position>
+      <Position>
+        <Filename Value="AppCore.pas"/>
+        <Caret Line="108" Column="13" TopLine="92"/>
+      </Position>
+      <Position>
+        <Filename Value="AppCore.pas"/>
+        <Caret Line="114" Column="24" TopLine="98"/>
+      </Position>
+      <Position>
+        <Filename Value="AppCore.pas"/>
+        <Caret Line="368" Column="16" TopLine="352"/>
+      </Position>
+      <Position>
+        <Filename Value="AppCore.pas"/>
+        <Caret Line="369" Column="29" TopLine="353"/>
+      </Position>
+      <Position>
+        <Filename Value="AppCore.pas"/>
+        <Caret Line="372" Column="13" TopLine="356"/>
+      </Position>
+      <Position>
+        <Filename Value="SettingsForm.pas"/>
+        <Caret Line="170" Column="32" TopLine="155"/>
+      </Position>
+      <Position>
+        <Filename Value="SettingsForm.pas"/>
+        <Caret Line="747" Column="55" TopLine="737"/>
+      </Position>
+      <Position>
+        <Filename Value="SettingsForm.pas"/>
+        <Caret Line="108" Column="33" TopLine="108"/>
+      </Position>
+      <Position>
+        <Filename Value="SettingsForm.pas"/>
+        <Caret Line="107" Column="30" TopLine="97"/>
+      </Position>
+      <Position>
+        <Filename Value="SettingsForm.pas"/>
+        <Caret Line="108" Column="30" TopLine="98"/>
+      </Position>
+      <Position>
+        <Filename Value="SettingsForm.pas"/>
+        <Caret Line="109" Column="3" TopLine="98"/>
+      </Position>
+      <Position>
+        <Filename Value="SettingsForm.pas"/>
+        <Caret Line="111" Column="20" TopLine="98"/>
+      </Position>
+      <Position>
+        <Filename Value="SettingsForm.pas"/>
+        <Caret Line="116" Column="66" TopLine="98"/>
+      </Position>
+      <Position>
+        <Filename Value="SettingsForm.pas"/>
+        <Caret Line="112" Column="18" TopLine="98"/>
+      </Position>
+      <Position>
+        <Filename Value="SettingsForm.pas"/>
+        <Caret Line="408" Column="20" TopLine="400"/>
+      </Position>
+      <Position>
+        <Filename Value="SettingsForm.pas"/>
+        <Caret Line="110" Column="55" TopLine="98"/>
+      </Position>
+      <Position>
+        <Filename Value="SettingsForm.pas"/>
+        <Caret Line="109" Column="38" TopLine="97"/>
+      </Position>
+      <Position>
+        <Filename Value="SettingsForm.pas"/>
+        <Caret Line="110" Column="38" TopLine="98"/>
       </Position>
       <Position>
         <Filename Value="TrayController.pas"/>
-        <Caret Line="376" Column="74" TopLine="373"/>
-      </Position>
-      <Position>
-        <Filename Value="TrayController.pas"/>
-        <Caret Line="45" Column="30" TopLine="26"/>
-      </Position>
-      <Position>
-        <Filename Value="TrayController.pas"/>
-      </Position>
-      <Position>
-        <Filename Value="TrayController.pas"/>
-        <Caret Line="45" Column="30" TopLine="12"/>
-      </Position>
-      <Position>
-        <Filename Value="TrayController.pas"/>
-        <Caret Line="400" Column="18" TopLine="368"/>
-      </Position>
-      <Position>
-        <Filename Value="TrayController.pas"/>
-        <Caret Line="411" Column="20" TopLine="378"/>
-      </Position>
-      <Position>
-        <Filename Value="TrayController.pas"/>
-        <Caret Line="390" Column="53" TopLine="375"/>
-      </Position>
-      <Position>
-        <Filename Value="TrayController.pas"/>
-      </Position>
-      <Position>
-        <Filename Value="TrayController.pas"/>
-        <Caret Line="60" Column="49" TopLine="48"/>
-      </Position>
-      <Position>
-        <Filename Value="TrayController.pas"/>
-        <Caret Line="524" Column="76" TopLine="512"/>
-      </Position>
-      <Position>
-        <Filename Value="TrayController.pas"/>
-        <Caret Line="15" Column="27"/>
-      </Position>
-      <Position>
-        <Filename Value="TrayController.pas"/>
-        <Caret Line="33" Column="30"/>
-      </Position>
-      <Position>
-        <Filename Value="TrayController.pas"/>
-        <Caret Line="9" Column="56"/>
-      </Position>
-      <Position>
-        <Filename Value="TrayController.pas"/>
-        <Caret Line="19"/>
-      </Position>
-      <Position>
-        <Filename Value="TrayController.pas"/>
-        <Caret Line="69" TopLine="49"/>
-      </Position>
-      <Position>
-        <Filename Value="TrayController.pas"/>
-        <Caret Line="96" TopLine="77"/>
-      </Position>
-      <Position>
-        <Filename Value="TrayController.pas"/>
-        <Caret Line="113" TopLine="95"/>
-      </Position>
-      <Position>
-        <Filename Value="TrayController.pas"/>
-        <Caret Line="112" TopLine="108"/>
-      </Position>
-      <Position>
-        <Filename Value="TrayController.pas"/>
-        <Caret Line="29" TopLine="9"/>
-      </Position>
-      <Position>
-        <Filename Value="TrayController.pas"/>
-        <Caret Line="298" Column="17" TopLine="281"/>
-      </Position>
-      <Position>
-        <Filename Value="TrayController.pas"/>
-      </Position>
-      <Position>
-        <Filename Value="TrayController.pas"/>
-        <Caret Line="298" Column="17" TopLine="266"/>
-      </Position>
-      <Position>
-        <Filename Value="multiPingLed.lpr"/>
-        <Caret Line="16" Column="27"/>
-      </Position>
-      <Position>
-        <Filename Value="LangManager.pas"/>
-        <Caret Line="341" Column="36" TopLine="321"/>
+        <Caret Line="789" Column="15" TopLine="787"/>
       </Position>
     </JumpHistory>
     <RunParams>
@@ -243,6 +279,9 @@
       </Item>
       <Item>
         <Expression Value="I"/>
+      </Item>
+      <Item>
+        <Expression Value="ErrorMsg"/>
       </Item>
     </Watches>
   </Debugging>

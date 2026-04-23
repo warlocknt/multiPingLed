@@ -53,8 +53,11 @@ desktop.ini
 # Logs
 *.log
 
+*.md
+!README.md
+
 # multiPingLed config (опционально)
-# *.ini
+*.ini
 
 # Screenshots / временные ресурсы (опционально)
 /promts/*
