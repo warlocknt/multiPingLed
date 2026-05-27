@@ -90,36 +90,4 @@ object NodeEditForm: TNodeEditForm
     ModalResult = 2
     TabOrder = 5
   end
-  object eRunOnPingFail: TEdit
-    Left = 18
-    Height = 23
-    Top = 160
-    Width = 312
-    TabOrder = 6
-  end
-  object eRunOnPingResore: TEdit
-    Left = 18
-    Height = 23
-    Top = 215
-    Width = 312
-    TabOrder = 7
-  end
-  object cbOnPingFail: TCheckBox
-    Left = 18
-    Height = 19
-    Top = 141
-    Width = 180
-    Caption = 'Выполнить при потере пинга'
-    TabOrder = 8
-    OnClick = cbOnPingFailClick
-  end
-  object cbOnPingRestore: TCheckBox
-    Left = 18
-    Height = 19
-    Top = 196
-    Width = 232
-    Caption = 'Выполнить при восстановлении пинга'
-    TabOrder = 9
-    OnClick = cbOnPingRestoreClick
-  end
 end

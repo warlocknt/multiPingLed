@@ -13,10 +13,6 @@ type
   { TNodeEditForm }
 
   TNodeEditForm = class(TForm)
-    cbOnPingFail: TCheckBox;
-    cbOnPingRestore: TCheckBox;
-    eRunOnPingFail: TEdit;
-    eRunOnPingResore: TEdit;
     lblName: TLabel;
     lblHost: TLabel;
     lblInterval: TLabel;
@@ -27,17 +23,15 @@ type
     edTimeout: TEdit;
     btnOK: TButton;
     btnCancel: TButton;
-    procedure cbOnPingFailClick(Sender: TObject);
-    procedure cbOnPingRestoreClick(Sender: TObject);
     procedure FormCreate(Sender: TObject);
   private
     FNode: TNodeConfig;
     FExistingHosts: array of string;
     FExcludeIndex: Integer;
-    function ValidateInput: Boolean;
   public
     procedure SetData(const Node: TNodeConfig; const ExistingHosts: array of string; ExcludeIndex: Integer);
     function GetData: TNodeConfig;
+    function ValidateInput: Boolean;
     procedure ApplyLocalization;
   end;
 
@@ -50,16 +44,6 @@ begin
   ApplyLocalization;
 end;
 
-procedure TNodeEditForm.cbOnPingFailClick(Sender: TObject);
-begin
-  eRunOnPingFail.Enabled := cbOnPingFail.Checked;
-end;
-
-procedure TNodeEditForm.cbOnPingRestoreClick(Sender: TObject);
-begin
-  eRunOnPingResore.Enabled := cbOnPingRestore.Checked;
-end;
-
 procedure TNodeEditForm.ApplyLocalization;
 begin
   lblName.Caption := _('label_name');
@@ -68,10 +52,6 @@ begin
   lblTimeout.Caption := _('label_timeout');
   btnOK.Caption := _('btn_apply');
   btnCancel.Caption := _('btn_cancel');
-  if Assigned(cbOnPingFail) then
-    cbOnPingFail.Caption := _('label_run_on_ping_fail');
-  if Assigned(cbOnPingRestore) then
-    cbOnPingRestore.Caption := _('label_run_on_ping_restore');
 end;
 
 procedure TNodeEditForm.SetData(const Node: TNodeConfig; const ExistingHosts: array of string; ExcludeIndex: Integer);

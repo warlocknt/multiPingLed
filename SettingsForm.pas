@@ -168,16 +168,13 @@ end;
 procedure TSettingsForm.cbSelectLanguageChange(Sender: TObject);
 var
   Idx: Integer;
-  LangInfo: TLanguageInfo;
 begin
   if FLoading then Exit;
 
   Idx := cbSelectLanguage.ItemIndex;
   if Idx < 0 then Exit;
 
-  LangInfo := LangMgr.GetLanguageInfo(Idx);
-  
-  // Just mark that language was changed - will be applied on Apply
+  // Просто помечаем, что язык изменён — применится по «Применить»
   FModified := True;
 end;
 
@@ -293,6 +290,7 @@ begin
     Item.Caption := FConfig.Groups[I].Name;
     Item.Checked := FConfig.Groups[I].Enabled;
 
+    TypeStr := '';
     case FConfig.Groups[I].GroupType of
       gtSingle: TypeStr := _('type_single');
       gt2x2: TypeStr := _('type_2x2');
@@ -417,8 +415,8 @@ begin
   for I := 0 to High(FConfig.Nodes) do
     ExistingHosts[I] := FConfig.Nodes[I].Host;
 
-  // Initialize new node
-  FillChar(NewNode, SizeOf(NewNode), 0);
+  // Initialize new node (запись содержит managed-поля — не FillChar)
+  NewNode := Default(TNodeConfig);
   NewNode.Name := 'New Node';
   NewNode.Host := '';
   NewNode.IntervalMs := 5000;
@@ -433,15 +431,19 @@ begin
 
     if Dlg.ShowModal = mrOK then
     begin
-      NewNode := Dlg.GetData;
-      NewIndex := Length(FConfig.Nodes);
-      SetLength(FConfig.Nodes, NewIndex + 1);
+      // При провале валидации (пустой/дублирующийся хост) узел не сохраняем
+      if Dlg.ValidateInput then
+      begin
+        NewNode := Dlg.GetData;
+        NewIndex := Length(FConfig.Nodes);
+        SetLength(FConfig.Nodes, NewIndex + 1);
 
-      NewNode.Id := GetNextNodeId;
-      FConfig.Nodes[NewIndex] := NewNode;
+        NewNode.Id := GetNextNodeId;
+        FConfig.Nodes[NewIndex] := NewNode;
 
-      FModified := True;
-      RefreshNodesList;
+        FModified := True;
+        RefreshNodesList;
+      end;
     end;
   finally
     Dlg.Free;
@@ -476,9 +478,13 @@ begin
 
     if Dlg.ShowModal = mrOK then
     begin
-      FConfig.Nodes[SelIndex] := Dlg.GetData;
-      FModified := True;
-      RefreshNodesList;
+      // При провале валидации (пустой/дублирующийся хост) изменения не сохраняем
+      if Dlg.ValidateInput then
+      begin
+        FConfig.Nodes[SelIndex] := Dlg.GetData;
+        FModified := True;
+        RefreshNodesList;
+      end;
     end;
   finally
     Dlg.Free;
@@ -546,7 +552,7 @@ begin
     Exit;
   end;
 
-  FillChar(NewGroup, SizeOf(NewGroup), 0);
+  NewGroup := Default(TNodeGroup);  // запись содержит managed-поля — не FillChar
   NewGroup.Name := 'New Group';
   NewGroup.GroupType := gtSingle;
   SetLength(NewGroup.NodeIds, 1);

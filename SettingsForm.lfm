@@ -1,42 +1,41 @@
 object SettingsForm: TSettingsForm
   Left = 0
-  Height = 448
+  Height = 358
   Top = 0
-  Width = 729
+  Width = 583
   BorderStyle = bsSingle
   Caption = 'Settings'
-  ClientHeight = 448
-  ClientWidth = 729
-  Constraints.MaxWidth = 729
-  Constraints.MinWidth = 729
-  DesignTimePPI = 120
+  ClientHeight = 358
+  ClientWidth = 583
+  Constraints.MaxWidth = 583
+  Constraints.MinWidth = 583
   Position = poScreenCenter
   LCLVersion = '4.6.0.0'
   OnCreate = FormCreate
   OnShow = FormShow
   object PageControl: TPageControl
-    Left = 5
-    Height = 390
-    Top = 5
-    Width = 719
+    Left = 4
+    Height = 312
+    Top = 4
+    Width = 575
     ActivePage = TabSheet1
     Align = alClient
-    BorderSpacing.Around = 5
+    BorderSpacing.Around = 4
     TabIndex = 2
     TabOrder = 0
     object NodesTab: TTabSheet
       Caption = 'Nodes'
-      ClientHeight = 357
-      ClientWidth = 711
+      ClientHeight = 284
+      ClientWidth = 567
       object NodeMainPanel: TPanel
         Left = 0
-        Height = 357
+        Height = 284
         Top = 0
-        Width = 711
+        Width = 567
         Align = alClient
         BevelOuter = bvNone
-        ClientHeight = 357
-        ClientWidth = 711
+        ClientHeight = 284
+        ClientWidth = 567
         Color = 2105376
         Font.Color = 2829099
         ParentBackground = False
@@ -45,37 +44,37 @@ object SettingsForm: TSettingsForm
         TabOrder = 0
         object NodeListPanel: TPanel
           Left = 0
-          Height = 357
+          Height = 284
           Top = 0
-          Width = 586
+          Width = 467
           Align = alClient
           BevelOuter = bvNone
-          ClientHeight = 357
-          ClientWidth = 586
+          ClientHeight = 284
+          ClientWidth = 467
           ParentBackground = False
           TabOrder = 0
           object NodesList: TListView
             Left = 0
-            Height = 357
+            Height = 284
             Top = 0
-            Width = 586
+            Width = 467
             Align = alClient
             Columns = <            
               item
                 Caption = 'Name'
-                Width = 188
+                Width = 150
               end            
               item
                 Caption = 'Host'
-                Width = 188
+                Width = 150
               end            
               item
                 Caption = 'Interval'
-                Width = 88
+                Width = 70
               end            
               item
                 Caption = 'Timeout'
-                Width = 88
+                Width = 70
               end>
             ReadOnly = True
             RowSelect = True
@@ -85,24 +84,24 @@ object SettingsForm: TSettingsForm
           end
         end
         object NodeButtonsPanel: TPanel
-          Left = 586
-          Height = 357
+          Left = 467
+          Height = 284
           Top = 0
-          Width = 125
+          Width = 100
           Align = alRight
           BevelOuter = bvNone
-          ClientHeight = 357
-          ClientWidth = 125
+          ClientHeight = 284
+          ClientWidth = 100
           Font.Color = 2829099
           ParentBackground = False
           ParentColor = False
           ParentFont = False
           TabOrder = 1
           object btnAddNode: TButton
-            Left = 10
-            Height = 31
-            Top = 10
-            Width = 106
+            Left = 8
+            Height = 25
+            Top = 8
+            Width = 85
             Caption = 'Add node'
             Font.Color = 14737632
             ParentFont = False
@@ -110,10 +109,10 @@ object SettingsForm: TSettingsForm
             OnClick = btnAddNodeClick
           end
           object btnEditNode: TButton
-            Left = 10
-            Height = 31
-            Top = 50
-            Width = 106
+            Left = 8
+            Height = 25
+            Top = 40
+            Width = 85
             Caption = 'Edit node'
             Enabled = False
             Font.Color = 14737632
@@ -122,10 +121,10 @@ object SettingsForm: TSettingsForm
             OnClick = btnEditNodeClick
           end
           object btnDeleteNode: TButton
-            Left = 10
-            Height = 31
-            Top = 90
-            Width = 106
+            Left = 8
+            Height = 25
+            Top = 72
+            Width = 85
             Caption = 'Delete node'
             Enabled = False
             Font.Color = 14737632
@@ -138,51 +137,51 @@ object SettingsForm: TSettingsForm
     end
     object GroupsTab: TTabSheet
       Caption = 'Groups'
-      ClientHeight = 357
-      ClientWidth = 711
+      ClientHeight = 284
+      ClientWidth = 567
       object GroupMainPanel: TPanel
         Left = 0
-        Height = 357
+        Height = 284
         Top = 0
-        Width = 711
+        Width = 567
         Align = alClient
         BevelOuter = bvNone
-        ClientHeight = 357
-        ClientWidth = 711
+        ClientHeight = 284
+        ClientWidth = 567
         Font.Color = 2829099
         ParentBackground = False
         ParentFont = False
         TabOrder = 0
         object GroupListPanel: TPanel
           Left = 0
-          Height = 357
+          Height = 284
           Top = 0
-          Width = 586
+          Width = 467
           Align = alClient
           BevelOuter = bvNone
-          ClientHeight = 357
-          ClientWidth = 586
+          ClientHeight = 284
+          ClientWidth = 467
           ParentBackground = False
           TabOrder = 0
           object GroupsList: TListView
             Left = 0
-            Height = 357
+            Height = 284
             Top = 0
-            Width = 586
+            Width = 467
             Align = alClient
             Checkboxes = True
             Columns = <            
               item
                 Caption = 'Name'
-                Width = 250
+                Width = 200
               end            
               item
                 Caption = 'Type'
-                Width = 100
+                Width = 80
               end            
               item
                 Caption = 'Nodes'
-                Width = 188
+                Width = 150
               end>
             ReadOnly = True
             RowSelect = True
@@ -193,40 +192,40 @@ object SettingsForm: TSettingsForm
           end
         end
         object GroupButtonsPanel: TPanel
-          Left = 586
-          Height = 357
+          Left = 467
+          Height = 284
           Top = 0
-          Width = 125
+          Width = 100
           Align = alRight
           BevelOuter = bvNone
-          ClientHeight = 357
-          ClientWidth = 125
+          ClientHeight = 284
+          ClientWidth = 100
           ParentBackground = False
           TabOrder = 1
           object btnAddGroup: TButton
-            Left = 10
-            Height = 31
-            Top = 10
-            Width = 106
+            Left = 8
+            Height = 25
+            Top = 8
+            Width = 85
             Caption = 'Add group'
             TabOrder = 0
             OnClick = btnAddGroupClick
           end
           object btnEditGroup: TButton
-            Left = 10
-            Height = 31
-            Top = 50
-            Width = 106
+            Left = 8
+            Height = 25
+            Top = 40
+            Width = 85
             Caption = 'Edit group'
             Enabled = False
             TabOrder = 1
             OnClick = btnEditGroupClick
           end
           object btnDeleteGroup: TButton
-            Left = 10
-            Height = 31
-            Top = 90
-            Width = 106
+            Left = 8
+            Height = 25
+            Top = 72
+            Width = 85
             Caption = 'Delete group'
             Enabled = False
             TabOrder = 2
@@ -237,14 +236,14 @@ object SettingsForm: TSettingsForm
     end
     object TabSheet1: TTabSheet
       Caption = 'Параметры'
-      ClientHeight = 357
-      ClientWidth = 711
+      ClientHeight = 284
+      ClientWidth = 567
       object cbSelectLanguage: TComboBox
-        Left = 10
-        Height = 25
-        Top = 31
-        Width = 125
-        ItemHeight = 19
+        Left = 8
+        Height = 21
+        Top = 25
+        Width = 100
+        ItemHeight = 15
         Items.Strings = (
           'English'
           'Russian'
@@ -254,32 +253,33 @@ object SettingsForm: TSettingsForm
         OnChange = cbSelectLanguageChange
       end
       object lLang: TLabel
-        Left = 40
-        Height = 20
-        Top = 10
-        Width = 68
+        Left = 32
+        Height = 15
+        Top = 8
+        Width = 55
         Caption = 'Language:'
       end
       object lCommandExec: TLabel
-        Left = 276
-        Height = 20
-        Top = 72
-        Width = 399
+        Left = 221
+        Height = 15
+        Top = 58
+        Width = 314
         Caption = 'Команда при изменении доступности узла (глоабально):'
       end
       object eCommandExec: TEdit
-        Left = 256
-        Height = 28
-        Top = 92
-        Width = 440
+        Left = 8
+        Height = 23
+        Top = 74
+        Width = 552
+        Anchors = [akTop, akLeft, akRight]
         TabOrder = 1
         TextHint = 'C:\\\\notify.cmd host=\\{host\\} status=\\{status\\} ping=\\{ping\\}'
       end
       object Memo1: TMemo
-        Left = 280
-        Height = 112
-        Top = 128
-        Width = 190
+        Left = 224
+        Height = 90
+        Top = 102
+        Width = 152
         BorderStyle = bsNone
         Lines.Strings = (
           '{host}'#9'IP или FQDN'
@@ -292,10 +292,10 @@ object SettingsForm: TSettingsForm
         TabOrder = 2
       end
       object cbBaloonHint: TCheckBox
-        Left = 264
-        Height = 24
-        Top = 31
-        Width = 411
+        Left = 211
+        Height = 19
+        Top = 25
+        Width = 330
         Caption = 'Оповещать о смене статуса узла с помощью BaloonHint'
         TabOrder = 3
       end
@@ -303,19 +303,19 @@ object SettingsForm: TSettingsForm
   end
   object SettingsFormButtonsPanel: TPanel
     Left = 0
-    Height = 48
-    Top = 400
-    Width = 729
+    Height = 38
+    Top = 320
+    Width = 583
     Align = alBottom
-    ClientHeight = 48
-    ClientWidth = 729
+    ClientHeight = 38
+    ClientWidth = 583
     ParentBackground = False
     TabOrder = 1
     object btnApply: TButton
-      Left = 492
-      Height = 31
-      Top = 6
-      Width = 106
+      Left = 393
+      Height = 25
+      Top = 4
+      Width = 85
       Anchors = [akRight, akBottom]
       Caption = 'Apply'
       Font.Color = 14737632
@@ -324,10 +324,10 @@ object SettingsForm: TSettingsForm
       OnClick = btnApplyClick
     end
     object btnCancel: TButton
-      Left = 611
-      Height = 31
-      Top = 6
-      Width = 106
+      Left = 488
+      Height = 25
+      Top = 4
+      Width = 85
       Anchors = [akRight, akBottom]
       Caption = 'Cancel'
       Font.Color = 14737632
@@ -336,10 +336,10 @@ object SettingsForm: TSettingsForm
       OnClick = btnCancelClick
     end
     object btnImportNodes: TButton
-      Left = 10
-      Height = 31
-      Top = 6
-      Width = 106
+      Left = 8
+      Height = 25
+      Top = 4
+      Width = 85
       Anchors = [akLeft, akBottom]
       Caption = 'Import'
       Font.Color = 14737632
@@ -348,10 +348,10 @@ object SettingsForm: TSettingsForm
       OnClick = btnImportNodesClick
     end
     object btnExportNodes: TButton
-      Left = 120
-      Height = 31
-      Top = 6
-      Width = 106
+      Left = 96
+      Height = 25
+      Top = 4
+      Width = 85
       Anchors = [akLeft, akBottom]
       Caption = 'Export'
       Font.Color = 14737632

@@ -79,7 +79,28 @@ type
     procedure SetBalloonHintEnabled(Value: Boolean);
   end;
 
+// Единая логика разрешения пути к конфигу: сначала портативный config.ini
+// рядом с exe, затем APPDATA\multiPingLed\config.ini. Используется и в .lpr,
+// и в AppCore, чтобы путь (и читаемый из него язык) не расходились.
+function ResolveConfigPath: string;
+
 implementation
+
+function ResolveConfigPath: string;
+var
+  ExeDir, AppDataDir, LocalConfig: string;
+begin
+  ExeDir := ExtractFilePath(ParamStr(0));
+  LocalConfig := ExeDir + 'config.ini';
+
+  // Приоритет 1: конфиг рядом с exe (портативный режим)
+  if FileExists(LocalConfig) then
+    Exit(LocalConfig);
+
+  // Приоритет 2: AppData\Roaming\multiPingLed\
+  AppDataDir := SysUtils.GetEnvironmentVariable('APPDATA') + '\multiPingLed\';
+  Result := AppDataDir + 'config.ini';
+end;
 
 procedure ConfigDebugLog(const Msg: string);
 begin
@@ -102,8 +123,8 @@ end;
 
 function TConfigManager.NodeStateToStr(State: TNodeState): string;
 begin
+  Result := 'unknown';
   case State of
-    nsUnknown: Result := 'unknown';
     nsUp: Result := 'up';
     nsDown: Result := 'down';
   end;
@@ -118,8 +139,8 @@ end;
 
 function TConfigManager.GroupTypeToStr(GType: TGroupType): string;
 begin
+  Result := 'single';
   case GType of
-    gtSingle: Result := 'single';
     gt2x2: Result := '2x2';
     gt3x3: Result := '3x3';
   end;
@@ -233,13 +254,27 @@ var
   Ini: TIniFile;
   I, J: Integer;
   NodeIdsStr: string;
+  Sections: TStringList;
 begin
   ConfigDebugLog('Saving config to ' + FConfigPath);
   if not DirectoryExists(FConfigDir) then
     ForceDirectories(FConfigDir);
-  
+
   Ini := TIniFile.Create(FConfigPath);
   try
+    // Удаляем старые секции Node*/Group* перед записью: TIniFile не перезаписывает
+    // файл целиком, поэтому при уменьшении числа узлов/групп оставались бы
+    // «осиротевшие» секции.
+    Sections := TStringList.Create;
+    try
+      Ini.ReadSections(Sections);
+      for I := 0 to Sections.Count - 1 do
+        if (Pos('Node', Sections[I]) = 1) or (Pos('Group', Sections[I]) = 1) then
+          Ini.EraseSection(Sections[I]);
+    finally
+      Sections.Free;
+    end;
+
     Ini.WriteString('General', 'Version', FConfig.Version);
     Ini.WriteInteger('General', 'NodeCount', Length(FConfig.Nodes));
     Ini.WriteInteger('General', 'GroupCount', Length(FConfig.Groups));
@@ -404,21 +439,26 @@ var
   I, J: Integer;
   NodeIdsStr: string;
   OldConfig: TAppConfig;
+  TempIds: TStringList;
+  PosComma: Integer;
 begin
   Result := False;
   ErrorMsg := '';
-  
+
   if not FileExists(FileName) then
   begin
     ErrorMsg := 'File not found';
     Exit;
   end;
-  
+
   OldConfig := FConfig;
-  
+
   try
     Ini := TIniFile.Create(FileName);
     try
+      // Версию тоже читаем из импортируемого файла (ранее терялась)
+      TempConfig.Version := Ini.ReadString('General', 'Version', '0.0');
+
       NodeCount := Ini.ReadInteger('General', 'NodeCount', 0);
       SetLength(TempConfig.Nodes, NodeCount);
       
@@ -445,31 +485,46 @@ begin
 
         NodeIdsStr := Ini.ReadString('Group' + IntToStr(I), 'NodeIds', '');
 
-        // Парсим NodeIds через TStringList (как в LoadConfig)
-        with TStringList.Create do
+        // Ручной разбор по запятым (как в LoadConfig). DelimitedText без
+        // StrictDelimiter рвал бы строку и по пробелам и спецсимволам кавычек.
+        TempIds := TStringList.Create;
         try
-          Delimiter := ',';
-          DelimitedText := NodeIdsStr;
-          SetLength(TempConfig.Groups[I].NodeIds, Count);
-          for J := 0 to Count - 1 do
-            TempConfig.Groups[I].NodeIds[J] := StrToIntDef(Strings[J], 0);
+          while NodeIdsStr <> '' do
+          begin
+            PosComma := Pos(',', NodeIdsStr);
+            if PosComma > 0 then
+            begin
+              TempIds.Add(Trim(Copy(NodeIdsStr, 1, PosComma - 1)));
+              Delete(NodeIdsStr, 1, PosComma);
+            end
+            else
+            begin
+              TempIds.Add(Trim(NodeIdsStr));
+              NodeIdsStr := '';
+            end;
+          end;
+
+          SetLength(TempConfig.Groups[I].NodeIds, TempIds.Count);
+          for J := 0 to TempIds.Count - 1 do
+            TempConfig.Groups[I].NodeIds[J] := StrToIntDef(TempIds[J], 0);
         finally
-          Free;
+          TempIds.Free;
         end;
       end;
     finally
       Ini.Free;
     end;
-    
+
     FConfig := TempConfig;
-    
+
     if not ValidateConfig(ErrorMsg) then
     begin
       FConfig := OldConfig;
       Exit;
     end;
-    
-    SaveConfig;
+
+    // НЕ пишем на диск: ImportConfig только парсит/валидирует и загружает в FConfig
+    // для предпросмотра. Запись — только по «Применить» (SettingsForm.btnApplyClick).
     Result := True;
   except
     on E: Exception do
@@ -485,9 +540,22 @@ var
   Ini: TIniFile;
   I, J: Integer;
   NodeIdsStr: string;
+  Sections: TStringList;
 begin
   Ini := TIniFile.Create(FileName);
   try
+    // Чистим старые секции Node*/Group* — на случай экспорта поверх существующего
+    // файла с большим числом узлов/групп.
+    Sections := TStringList.Create;
+    try
+      Ini.ReadSections(Sections);
+      for I := 0 to Sections.Count - 1 do
+        if (Pos('Node', Sections[I]) = 1) or (Pos('Group', Sections[I]) = 1) then
+          Ini.EraseSection(Sections[I]);
+    finally
+      Sections.Free;
+    end;
+
     Ini.WriteString('General', 'Version', FConfig.Version);
     Ini.WriteInteger('General', 'NodeCount', Length(FConfig.Nodes));
     Ini.WriteInteger('General', 'GroupCount', Length(FConfig.Groups));

@@ -18,11 +18,14 @@
     </General>
     <VersionInfo>
       <UseVersionInfo Value="True"/>
+      <AutoIncrementBuild Value="True"/>
       <MajorVersionNr Value="1"/>
-      <RevisionNr Value="2"/>
+      <MinorVersionNr Value="1"/>
+      <RevisionNr Value="5"/>
+      <BuildNr Value="748"/>
       <Language Value="0419"/>
-      <Attributes pvaPreRelease="True"/>
-      <StringTable Comments="lightweight Windows tray utility for monitoring multiple hosts via ICMP (ping) with LED-style status indicators" FileDescription="lightweight Windows tray utility for monitoring multiple hosts via ICMP (ping) with LED-style status indicators" InternalName="multiPingLed" OriginalFilename="multiPingLed.exe" ProductName="multiPingLed" ProductVersion="1.0.1.0"/>
+      <Attributes pvaPatched="True"/>
+      <StringTable Comments="multiPingLed - lightweight Windows tray utility for monitoring multiple hosts via ICMP (ping) with LED-style status indicators" FileDescription="multiPingLed" InternalName="multiPingLed" OriginalFilename="multiPingLed.exe" ProductName="multiPingLed" ProductVersion="1.1"/>
     </VersionInfo>
     <BuildModes>
       <Item Name="Debug" Default="True"/>

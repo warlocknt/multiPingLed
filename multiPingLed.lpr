@@ -16,19 +16,21 @@ uses
 
 var
   ConfigMgr: TConfigManager;
-  ConfigDir, LangDir, LangCode: string;
+  LangDir, LangCode: string;
 
 {$R *.res}
 
 begin
   // Включаем масштабирование для высокого DPI
   Application.Scaled:=True;
+
   // Инициализация приложения
   Application.Initialize;
 
-  //Получение пути к конфиг файлу
-  ConfigDir := GetEnvironmentVariable('APPDATA') + '\multiPingLed\config.ini';
-  GlobalConfigPath := ConfigDir;  // Устанавливаем глобальную переменную
+  // Получение пути к конфиг файлу — та же логика, что и в AppCore:
+  // приоритетно портативный config.ini рядом с exe, иначе APPDATA. Иначе язык
+  // читался бы не из того конфига, что использует приложение.
+  GlobalConfigPath := ResolveConfigPath;
 
   // Инициализация менеджера локализации
   LangDir := IncludeTrailingPathDelimiter(ExtractFilePath(Application.ExeName)) + 'lang';

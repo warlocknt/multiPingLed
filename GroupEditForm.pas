@@ -138,15 +138,11 @@ procedure TGroupEditForm.UpdateCounter;
 var
   Count, MinCount, MaxCount: Integer;
 begin
+  // Тип группы выбирает пользователь (cbType). Здесь НЕ трогаем cbType.ItemIndex,
+  // иначе возникает петля с cbType.OnChange и пользователь не может свободно
+  // выбрать тип. Только показываем, сколько узлов выбрано относительно диапазона
+  // выбранного типа.
   Count := GetSelectedCount;
-  case Count of
-    1: cbType.ItemIndex := 0;
-    2..4: cbType.ItemIndex := 1;
-    5..9: cbType.ItemIndex := 2;
-    else
-      cbType.ItemIndex := 2;
-  end;
-
   MinCount := GetMinCount;
   MaxCount := GetRequiredCount;
 

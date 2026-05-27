@@ -60,7 +60,6 @@ type
     procedure StartVersionCheck;
     // Получение текущей версии приложения
     function GetAppVersion: string;
-    function ResolveConfigPath: string;
     function NormalizeVersion(const S: string): string;
     function CompareVersions(const V1, V2: string): Integer;
     function GetActiveNodeIds(const Groups: array of TNodeGroup): TIntArray;
@@ -158,7 +157,7 @@ begin
 
   try
     // Создаем все менеджеры
-    GlobalConfigPath := ResolveConfigPath;
+    GlobalConfigPath := ConfigManager.ResolveConfigPath;
     FConfigManager := TConfigManager.Create('');
     FNodeManager := TNodeManager.Create;
     FGroupManager := TGroupManager.Create;
@@ -390,12 +389,21 @@ begin
   if TAppCore.Instance.UpdateCheckFinished then
     begin
     if TAppCore.Instance.UpdateAvailable then
-      FAboutForm.LUpdateStatus.Caption := LangMgr.GetStringFmt('update_available', [TAppCore.Instance.LatestReleaseTag])
+      begin
+      FAboutForm.LUpdateStatus.Caption := LangMgr.GetStringFmt('update_available', [TAppCore.Instance.LatestReleaseTag]);
+      FAboutForm.SetUpdateStatus (updAvailable);
+      end
     else
       if TAppCore.Instance.UpdateCheckFailed then
-         FAboutForm.LUpdateStatus.Caption := _('update_check_failed')
+         begin
+         FAboutForm.LUpdateStatus.Caption := _('update_check_failed');
+         FAboutForm.SetUpdateStatus (updCheckFailed);
+         end
       else
+         begin
          FAboutForm.LUpdateStatus.Caption := _('update_none');
+         FAboutForm.SetUpdateStatus (updNone);
+         end;
     end;
 
   FAboutForm.ShowModal;
@@ -443,102 +451,110 @@ var
   Buffer: array[0..1023] of Byte;
   Response: TStringStream;
   JSON, TagNode: TJSONData;
-  URLPath, RawData: string;
+  RawData: string;
   URLPathW: WideString;
   RawTag: string;
 begin
   hSession := nil;
   hConnect := nil;
   hRequest := nil;
+  RawData := '';
   URLPathW := '/repos/warlocknt/multiPingLed/releases/latest';
-  Response := TStringStream.Create('');
+  // Внешний try..finally гарантирует вызов OnCheckDone на ЛЮБОМ пути выхода:
+  // при сетевой ошибке/раннем Exit FSuccess остаётся False → OnCheckDone
+  // выставит UpdateCheckFailed. Иначе результат проверки никогда не сообщался.
   try
+    Response := TStringStream.Create('');
+    try
+      if Terminated then Exit;
+
+      hSession := WinHttpOpen(PWideChar('multiPingLed/' + FLocalVersion),
+        WINHTTP_ACCESS_TYPE_DEFAULT_PROXY,
+        WINHTTP_NO_PROXY_NAME,
+        WINHTTP_NO_PROXY_BYPASS, 0);
+      if (hSession = nil) or Terminated then Exit;
+      // 5 секунд на каждый этап — иначе WaitFor при выходе заблокирует надолго
+      WinHttpSetTimeouts(hSession, 5000, 5000, 5000, 5000);
+
+      hConnect := WinHttpConnect(hSession, 'api.github.com',
+        INTERNET_DEFAULT_HTTPS_PORT, 0);
+      if (hConnect = nil) or Terminated then Exit;
+
+      hRequest := WinHttpOpenRequest(hConnect, 'GET', PWideChar(URLPathW),
+        nil, WINHTTP_NO_REFERER, WINHTTP_DEFAULT_ACCEPT_TYPES, WINHTTP_FLAG_SECURE);
+      if (hRequest = nil) or Terminated then Exit;
+
+      WinHttpAddRequestHeaders(hRequest, 'User-Agent: multiPingLed'#13#10,
+        DWORD(-1), WINHTTP_ADDREQ_FLAG_ADD);
+
+      if not WinHttpSendRequest(hRequest, WINHTTP_NO_ADDITIONAL_HEADERS, 0,
+        WINHTTP_NO_REQUEST_DATA, 0, 0, 0) then Exit;
+      if Terminated then Exit;
+      if not WinHttpReceiveResponse(hRequest, nil) then Exit;
+
+      repeat
+        if Terminated then Break;
+        DataAvailable := 0;
+        WinHttpQueryDataAvailable(hRequest, @DataAvailable);
+        if DataAvailable = 0 then Break;
+        WinHttpReadData(hRequest, @Buffer, SizeOf(Buffer), @BytesRead);
+        if BytesRead > 0 then
+          Response.WriteBuffer(Buffer, BytesRead);
+      until DataAvailable = 0;
+
+      // Сохраняем данные ДО освобождения Response
+      RawData := Response.DataString;
+    finally
+      if hRequest <> nil then WinHttpCloseHandle(hRequest);
+      if hConnect <> nil then WinHttpCloseHandle(hConnect);
+      if hSession <> nil then WinHttpCloseHandle(hSession);
+      Response.Free;
+    end;
+
     if Terminated then Exit;
 
-    hSession := WinHttpOpen(PWideChar('multiPingLed/' + FLocalVersion),
-      WINHTTP_ACCESS_TYPE_DEFAULT_PROXY,
-      WINHTTP_NO_PROXY_NAME,
-      WINHTTP_NO_PROXY_BYPASS, 0);
-    if (hSession = nil) or Terminated then Exit;
-    // 5 секунд на каждый этап — иначе WaitFor при выходе заблокирует надолго
-    WinHttpSetTimeouts(hSession, 5000, 5000, 5000, 5000);
-
-    hConnect := WinHttpConnect(hSession, 'api.github.com',
-      INTERNET_DEFAULT_HTTPS_PORT, 0);
-    if (hConnect = nil) or Terminated then Exit;
-
-    hRequest := WinHttpOpenRequest(hConnect, 'GET', PWideChar(URLPathW),
-      nil, WINHTTP_NO_REFERER, WINHTTP_DEFAULT_ACCEPT_TYPES, WINHTTP_FLAG_SECURE);
-    if (hRequest = nil) or Terminated then Exit;
-
-    WinHttpAddRequestHeaders(hRequest, 'User-Agent: multiPingLed'#13#10,
-      DWORD(-1), WINHTTP_ADDREQ_FLAG_ADD);
-
-    if not WinHttpSendRequest(hRequest, WINHTTP_NO_ADDITIONAL_HEADERS, 0,
-      WINHTTP_NO_REQUEST_DATA, 0, 0, 0) then Exit;
-    if Terminated then Exit;
-    if not WinHttpReceiveResponse(hRequest, nil) then Exit;
-
-    repeat
-      if Terminated then Break;
-      DataAvailable := 0;
-      WinHttpQueryDataAvailable(hRequest, @DataAvailable);
-      if DataAvailable = 0 then Break;
-      WinHttpReadData(hRequest, @Buffer, SizeOf(Buffer), @BytesRead);
-      if BytesRead > 0 then
-        Response.WriteBuffer(Buffer, BytesRead);
-    until DataAvailable = 0;
-
-    // Сохраняем данные ДО освобождения Response
-    RawData := Response.DataString;
-  finally
-    if hRequest <> nil then WinHttpCloseHandle(hRequest);
-    if hConnect <> nil then WinHttpCloseHandle(hConnect);
-    if hSession <> nil then WinHttpCloseHandle(hSession);
-    Response.Free;
-  end;
-
-  if Terminated then Exit;
-
-  // Парсим JSON
-  JSON := GetJSON(RawData);
-  try
-    if JSON <> nil then
-    begin
-      TagNode := JSON.FindPath('tag_name');
-      if TagNode <> nil then
-        RawTag := TagNode.AsString
+    // Парсим JSON
+    JSON := GetJSON(RawData);
+    try
+      if JSON <> nil then
+      begin
+        TagNode := JSON.FindPath('tag_name');
+        if TagNode <> nil then
+          RawTag := TagNode.AsString
+        else
+          Exit;
+      end
       else
         Exit;
-    end
-    else
-      Exit;
+    finally
+      JSON.Free;
+    end;
+
+    // Извлекаем версию из тега (убираем 'v', суффиксы типа -beta, -rc)
+    FLatestTag := RawTag;
+    if (FLatestTag <> '') and (FLatestTag[1] = 'v') then
+      Delete(FLatestTag, 1, 1);
+
+    // Убираем суффиксы (-beta, -rc, -pre и т.д.)
+    while (Length(FLatestTag) > 0) and (FLatestTag[Length(FLatestTag)] in ['a'..'z', 'A'..'Z', '-', '_', '.']) do
+    begin
+      // Ищем последний дефис или точку перед цифрами
+      if Pos('-', FLatestTag) > 0 then
+        FLatestTag := Copy(FLatestTag, 1, Pos('-', FLatestTag) - 1)
+      else
+        Break;
+    end;
+
+    if FLatestTag = '' then Exit;
+
+    FSuccess := True;
+    FUpdateAvailable := (FAppCore.CompareVersions(FLocalVersion, FLatestTag) < 0);
   finally
-    JSON.Free;
+    // Сообщаем результат в основной поток. При выходе приложения (Terminated)
+    // не синхронизируемся — обновлять UI уже не нужно.
+    if not Terminated then
+      Synchronize(@OnCheckDone);
   end;
-
-  // Извлекаем версию из тега (убираем 'v', суффиксы типа -beta, -rc)
-  FLatestTag := RawTag;
-  if (FLatestTag <> '') and (FLatestTag[1] = 'v') then
-    Delete(FLatestTag, 1, 1);
-
-  // Убираем суффиксы (-beta, -rc, -pre и т.д.)
-  while (Length(FLatestTag) > 0) and (FLatestTag[Length(FLatestTag)] in ['a'..'z', 'A'..'Z', '-', '_', '.']) do
-  begin
-    // Ищем последний дефис или точку перед цифрами
-    if Pos('-', FLatestTag) > 0 then
-      FLatestTag := Copy(FLatestTag, 1, Pos('-', FLatestTag) - 1)
-    else
-      Break;
-  end;
-
-  if FLatestTag = '' then Exit;
-
-  FSuccess := True;
-  FUpdateAvailable := (FAppCore.CompareVersions(FLocalVersion, FLatestTag) < 0);
-
-  // Обновляем UI в основном потоке
-  Synchronize(@OnCheckDone);
 end;
 
 procedure TVersionCheckThread.OnCheckDone;
@@ -568,27 +584,6 @@ begin
   with inf.FixedInfo do
     Result := Format('%d.%d.%d.%d', [FileVersion[0], FileVersion[1], FileVersion[2], FileVersion[3]]);
   inf.Free;
-end;
-
-function TAppCore.ResolveConfigPath: string;
-var
-  ExeDir: string;
-  AppDataDir: string;
-  LocalConfig: string;
-begin
-  ExeDir := ExtractFilePath(ParamStr(0));
-   LocalConfig := ExeDir + 'config.ini';
-
-   // Приоритет 1: конфиг рядом с exe
-   if FileExists(LocalConfig) then
-   begin
-     Result := LocalConfig;
-     Exit;
-   end;
-
-   // Приоритет 2: AppData\Roaming\multiPingLed\
-   AppDataDir := SysUtils.GetEnvironmentVariable('APPDATA') + '\multiPingLed\';
-   Result := AppDataDir + 'config.ini';
 end;
 
 function TAppCore.NormalizeVersion(const S: string): string;

@@ -47,9 +47,7 @@ type
     FHost: string;
     FIntervalMs: Integer;
     FTimeoutMs: Integer;
-    FCurrentState: TNodeState;
     procedure DoPing;
-    procedure OnTerminateHandler(Sender: TObject);
   protected
     procedure Execute; override;
   public
@@ -87,50 +85,59 @@ procedure TNodeManager.StopAllThreads;
 var
   I: Integer;
   Thread: TPingThread;
-  WaitTime: Cardinal;
   ThreadsCopy: array of TPingThread;
+  MaxTimeout, WaitBudget: Integer;
+  Deadline: QWord;
+  AllFinished: Boolean;
 begin
-  // Посылаем сигнал завершения всем потокам под блокировкой,
-  // одновременно копируем указатели для ожидания без CS
+  // Посылаем сигнал завершения всем потокам под блокировкой, одновременно
+  // копируем указатели для ожидания без CS и сразу очищаем список.
   EnterCriticalSection(FCriticalSection);
   try
     SetLength(ThreadsCopy, FPingThreads.Count);
+    MaxTimeout := 0;
     for I := 0 to FPingThreads.Count - 1 do
     begin
       Thread := TPingThread(FPingThreads[I]);
-      Thread.OnTerminate := nil;
       Thread.Terminate;
       ThreadsCopy[I] := Thread;
+      if Thread.FTimeoutMs > MaxTimeout then
+        MaxTimeout := Thread.FTimeoutMs;
     end;
+    FPingThreads.Clear;  // владение потоками теперь через ThreadsCopy
   finally
     LeaveCriticalSection(FCriticalSection);
   end;
 
-  // Ждем завершения каждого потока БЕЗ блокировки —
-  // потоки должны иметь возможность войти в CS для UpdateNodeState.
-  // Таймаут 2500 мс чтобы покрыть максимальный TimeoutMs пинга (типично 2000 мс) —
-  // иначе поток в IcmpSendEcho не успеет завершиться и будет утечка.
+  // Ждём ВСЕ потоки параллельно по общему дедлайну. После #4 (свой ICMP-хэндл
+  // с таймаутом) и #7 (дробный Sleep) поток замечает Terminate максимум за
+  // ~TimeoutMs + один шаг сна. Бюджет согласован с реальным TimeoutMs пинга.
+  WaitBudget := MaxTimeout + 2000;
+  if WaitBudget < 4000 then WaitBudget := 4000;
+  Deadline := GetTickCount64 + WaitBudget;
+  repeat
+    AllFinished := True;
+    for I := 0 to High(ThreadsCopy) do
+      if not ThreadsCopy[I].Finished then
+      begin
+        AllFinished := False;
+        Break;
+      end;
+    if AllFinished then Break;
+    Sleep(50);
+  until GetTickCount64 >= Deadline;
+
+  // Освобождаем потоки. TOCTOU закрыт: НЕ полагаемся на гонку FreeOnTerminate —
+  // для незавершившегося (крайне маловероятно при таймауте < дедлайна) делаем
+  // блокирующий WaitFor, чтобы гарантировать: после выхода ни один поток не
+  // обратится к уже разрушенной критической секции.
   for I := 0 to High(ThreadsCopy) do
   begin
     Thread := ThreadsCopy[I];
-    WaitTime := 0;
-    while (WaitTime < 2500) and not Thread.Finished do
-    begin
-      Sleep(50);
-      WaitTime := WaitTime + 50;
-    end;
-    if Thread.Finished then
-      Thread.Free
-    else
-      Thread.FreeOnTerminate := True;
-  end;
-
-  // Очищаем список под блокировкой
-  EnterCriticalSection(FCriticalSection);
-  try
-    FPingThreads.Clear;
-  finally
-    LeaveCriticalSection(FCriticalSection);
+    if Thread = nil then Continue;
+    if not Thread.Finished then
+      Thread.WaitFor;
+    Thread.Free;
   end;
 end;
 
@@ -211,6 +218,16 @@ begin
 
   if not ConfigChanged then
   begin
+    // Существенные для потоков поля (Id/Host/Interval/Timeout/активность) не
+    // изменились, но Name/Command могли поменяться. Обновляем FNodes, чтобы
+    // GetNodeById/ExecuteNodeCommand работали с актуальными данными. Перезапуск
+    // потоков при этом не нужен.
+    EnterCriticalSection(FCriticalSection);
+    try
+      FNodes := Nodes;
+    finally
+      LeaveCriticalSection(FCriticalSection);
+    end;
     FModified := False;
     Exit;
   end;
@@ -237,8 +254,7 @@ begin
       if not NodeStillExists then
       begin
         NodeDebugLog('Stopping orphan thread for removed node ' + IntToStr(Thread.FNodeId));
-        Thread.OnTerminate := nil;
-        Thread.FreeOnTerminate := True;
+        Thread.FreeOnTerminate := True;  // освободит себя сам после завершения Execute
         Thread.Terminate;
         FPingThreads.Delete(I);
       end;
@@ -270,7 +286,6 @@ begin
         // Узел стал неактивным - останавливаем поток
         NodeDebugLog('Stopping thread for node ' + IntToStr(FNodes[I].Id));
         Thread := TPingThread(FPingThreads[ThreadIdx]);
-        Thread.OnTerminate := nil;  // handler уже не нужен — мы сами удаляем из списка
         Thread.FreeOnTerminate := True;  // освободит себя сам после завершения Execute
         Thread.Terminate;
         FPingThreads.Delete(ThreadIdx);
@@ -309,7 +324,7 @@ begin
         Exit;
       end;
     end;
-    FillChar(Result, SizeOf(Result), 0);
+    Result := Default(TNodeConfig);  // запись содержит managed-поля — не FillChar
   finally
     LeaveCriticalSection(FCriticalSection);
   end;
@@ -397,7 +412,7 @@ var
   FullCmd, Cmd, Params, Ext: string;
   Process: TProcess;
   StatusStr: string;
-  SpacePos: Integer;
+  SpacePos, QuoteEnd: Integer;
 begin
   if Trim(Node.Command) = '' then Exit;
 
@@ -417,17 +432,37 @@ begin
   FullCmd := StringReplace(FullCmd, '{group}', GroupName, [rfReplaceAll, rfIgnoreCase]);
   FullCmd := StringReplace(FullCmd, '{ping}', IntToStr(Node.LastPingMs), [rfReplaceAll, rfIgnoreCase]);
 
-  // Разделяем на исполняемый файл и параметры (первый пробел = разделитель)
-  SpacePos := Pos(' ', FullCmd);
-  if SpacePos > 0 then
+  // Разделяем на исполняемый файл и параметры.
+  // Если путь в кавычках ("C:\Program Files\app.exe" arg1) — берём его целиком
+  // до закрывающей кавычки; иначе делим по первому пробелу.
+  if (Length(FullCmd) > 0) and (FullCmd[1] = '"') then
   begin
-    Cmd := Trim(Copy(FullCmd, 1, SpacePos - 1));
-    Params := Trim(Copy(FullCmd, SpacePos + 1, Length(FullCmd)));
+    QuoteEnd := Pos('"', FullCmd, 2);  // 3-арг System.Pos: поиск с позиции 2
+    if QuoteEnd > 0 then
+    begin
+      Cmd := Copy(FullCmd, 2, QuoteEnd - 2);
+      Params := Trim(Copy(FullCmd, QuoteEnd + 1, Length(FullCmd)));
+    end
+    else
+    begin
+      // Нет закрывающей кавычки — считаем всё (без кавычки) путём
+      Cmd := Copy(FullCmd, 2, Length(FullCmd));
+      Params := '';
+    end;
   end
   else
   begin
-    Cmd := FullCmd;
-    Params := '';
+    SpacePos := Pos(' ', FullCmd);
+    if SpacePos > 0 then
+    begin
+      Cmd := Trim(Copy(FullCmd, 1, SpacePos - 1));
+      Params := Trim(Copy(FullCmd, SpacePos + 1, Length(FullCmd)));
+    end
+    else
+    begin
+      Cmd := FullCmd;
+      Params := '';
+    end;
   end;
 
   // Определяем тип файла
@@ -496,34 +531,14 @@ begin
   FHost := NodeInfo.Host;
   FIntervalMs := NodeInfo.IntervalMs;
   FTimeoutMs := NodeInfo.TimeoutMs;
-  FCurrentState := NodeInfo.State;
   FreeOnTerminate := False;
-  OnTerminate := @OnTerminateHandler;
-end;
-
-procedure TPingThread.OnTerminateHandler(Sender: TObject);
-var
-  I: Integer;
-begin
-  if FNodeManager <> nil then
-  begin
-    EnterCriticalSection(FNodeManager.FCriticalSection);
-    try
-      for I := FNodeManager.FPingThreads.Count - 1 downto 0 do
-      begin
-        if TPingThread(FNodeManager.FPingThreads[I]) = Self then
-        begin
-          FNodeManager.FPingThreads.Delete(I);
-          Break;
-        end;
-      end;
-    finally
-      LeaveCriticalSection(FNodeManager.FCriticalSection);
-    end;
-  end;
+  // OnTerminate-обработчик не назначаем: все пути остановки потока (StopAllThreads,
+  // ApplyConfig) сами удаляют поток из FPingThreads и освобождают его.
 end;
 
 procedure TPingThread.Execute;
+var
+  Slept: Integer;
 begin
   while not Terminated do
   begin
@@ -532,8 +547,14 @@ begin
     except
       // Ignore exceptions during ping
     end;
-    if not Terminated then
-      Sleep(FIntervalMs);
+    // Дробим ожидание интервала, чтобы Terminate замечался за ~100 мс,
+    // а не за полный FIntervalMs.
+    Slept := 0;
+    while (Slept < FIntervalMs) and not Terminated do
+    begin
+      Sleep(100);
+      Inc(Slept, 100);
+    end;
   end;
 end;
 

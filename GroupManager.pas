@@ -24,10 +24,9 @@ type
     FNodeManager: TNodeManager;
     FCriticalSection: TRTLCriticalSection;
     FLastExecutedStates: array of array of ConfigManager.TNodeState;  // Для отслеживания выполненных команд
-    FLastGroupNames: array of string;  // Имена групп для команд
+    FStatesInitialized: Boolean;  // Состояния посеяны после ApplyConfig (до этого изменения не считаем)
     procedure OnNodeStateChange(Sender: TObject);
-    procedure UpdateGroupStates;
-    procedure ExecuteCommandsForChangedStates;
+    procedure UpdateGroupStates(RunCommands: Boolean = True);
   public
     constructor Create;
     destructor Destroy; override;
@@ -38,7 +37,7 @@ type
 
 implementation
 
-uses Windows, Process;
+uses Windows;
 
 procedure GroupDebugLog(const Msg: string);
 begin
@@ -50,6 +49,7 @@ begin
   inherited Create;
   InitCriticalSection(FCriticalSection);
   SetLength(FGroups, 0);
+  FStatesInitialized := False;
 end;
 
 destructor TGroupManager.Destroy;
@@ -113,7 +113,10 @@ begin
   end;
 
   // Update states OUTSIDE critical section to avoid deadlock (UpdateGroupStates re-enters CS)
-  UpdateGroupStates;
+  // RunCommands=False: при применении конфига только ПОСЕВ текущих состояний в
+  // FLastExecutedStates, без запуска команд — иначе стартовое заполнение
+  // (и любое «Применить») считалось бы изменением и дёргало все команды.
+  UpdateGroupStates(False);
 
   EnterCriticalSection(FCriticalSection);
   try
@@ -128,10 +131,10 @@ end;
 procedure TGroupManager.OnNodeStateChange(Sender: TObject);
 begin
   GroupDebugLog('Node state changed');
-  UpdateGroupStates;
+  UpdateGroupStates(True);
 end;
 
-procedure TGroupManager.ExecuteCommandsForChangedStates;
+procedure TGroupManager.UpdateGroupStates(RunCommands: Boolean);
 type
   TCommandEntry = record
     NodeId: Integer;
@@ -139,59 +142,27 @@ type
   end;
 var
   I, J: Integer;
-  Node: TNodeConfig;
+  NodeInfo: TNodeConfig;
+  ArraySize: Integer;
   Commands: array of TCommandEntry;
   CmdCount: Integer;
+  OldState, NewState: ConfigManager.TNodeState;
+  CanCompare: Boolean;
 begin
   if FNodeManager = nil then Exit;
 
   CmdCount := 0;
   SetLength(Commands, 0);
 
-  // Собираем ID изменившихся узлов под CS.
-  // GetNodeById вызывать здесь нельзя: он захватывает NodeManager.CS, тогда как
-  // существующий путь NodeManager.CS→GroupManager.CS (UpdateNodeState→OnNodeStateChange)
-  // создал бы обратный порядок захвата и deadlock.
-  EnterCriticalSection(FCriticalSection);
-  try
-    for I := 0 to High(FGroups) do
-      for J := 0 to High(FGroups[I].NodeIds) do
-      begin
-        if FGroups[I].NodeIds[J] <= 0 then Continue;
+  // Всё под ОДНОЙ блокировкой: обновляем состояния групп, формируем список
+  // изменившихся узлов и сразу же фиксируем новые состояния в FLastExecutedStates.
+  // Это устраняет гонку «прочитал старое — обновил новое» между вызовами.
+  // GetNodeById берёт NodeManager.CS (порядок GroupMgr.CS→NodeMgr.CS); обратный
+  // путь UpdateNodeState освобождает NodeMgr.CS ДО OnNodeStateChange, поэтому
+  // deadlock не возникает. Команды (ExecuteNodeCommand, запуск процессов)
+  // запускаем уже ПОСЛЕ выхода из CS.
+  CanCompare := RunCommands and FStatesInitialized;
 
-        if (I < Length(FLastExecutedStates)) and (J < Length(FLastExecutedStates[I])) then
-          if FGroups[I].NodeStates[J] = FLastExecutedStates[I][J] then
-            Continue;
-
-        SetLength(Commands, CmdCount + 1);
-        Commands[CmdCount].NodeId := FGroups[I].NodeIds[J];
-        Commands[CmdCount].GroupName := FGroups[I].Name;
-        Inc(CmdCount);
-      end;
-  finally
-    LeaveCriticalSection(FCriticalSection);
-  end;
-
-  // Разрешаем узлы и запускаем команды уже вне CS
-  for I := 0 to CmdCount - 1 do
-  begin
-    Node := FNodeManager.GetNodeById(Commands[I].NodeId);
-    if Node.Id = 0 then Continue;
-    if Trim(Node.Command) = '' then Continue;
-    GroupDebugLog('Executing command for node ' + IntToStr(Node.Id) + ' (' + Node.Name + ') state changed');
-    FNodeManager.ExecuteNodeCommand(Node, Commands[I].GroupName);
-  end;
-end;
-
-procedure TGroupManager.UpdateGroupStates;
-var
-  I, J: Integer;
-  NodeInfo: TNodeConfig;
-  ArraySize: Integer;
-begin
-  if FNodeManager = nil then Exit;
-
-  // Обновляем текущие состояния узлов в группах
   EnterCriticalSection(FCriticalSection);
   try
     for I := 0 to High(FGroups) do
@@ -202,36 +173,52 @@ begin
         if FGroups[I].NodeIds[J] > 0 then
         begin
           NodeInfo := FNodeManager.GetNodeById(FGroups[I].NodeIds[J]);
-          FGroups[I].NodeStates[J] := NodeInfo.State;
+          NewState := NodeInfo.State;
         end
         else
+          NewState := nsUnknown;
+
+        // Команду запускаем только при реальном переходе между up/down.
+        // Пропускаем первичную инициализацию и переходы в/из nsUnknown.
+        if CanCompare and (FGroups[I].NodeIds[J] > 0) and
+           (I < Length(FLastExecutedStates)) and (J < Length(FLastExecutedStates[I])) then
         begin
-          FGroups[I].NodeStates[J] := nsUnknown;
+          OldState := FLastExecutedStates[I][J];
+          if (NewState <> OldState) and
+             (NewState <> nsUnknown) and (OldState <> nsUnknown) then
+          begin
+            SetLength(Commands, CmdCount + 1);
+            Commands[CmdCount].NodeId := FGroups[I].NodeIds[J];
+            Commands[CmdCount].GroupName := FGroups[I].Name;
+            Inc(CmdCount);
+          end;
         end;
+
+        FGroups[I].NodeStates[J] := NewState;
       end;
     end;
-  finally
-    LeaveCriticalSection(FCriticalSection);
-  end;
 
-  // Выполняем команды пока FLastExecutedStates содержит СТАРЫЕ состояния —
-  // только так сравнение обнаружит изменение и сработает команда
-  ExecuteCommandsForChangedStates;
-
-  // Обновляем сохранённые состояния уже ПОСЛЕ выполнения команд
-  EnterCriticalSection(FCriticalSection);
-  try
+    // Фиксируем новые состояния согласованно (под той же блокировкой)
     SetLength(FLastExecutedStates, Length(FGroups));
-    SetLength(FLastGroupNames, Length(FGroups));
     for I := 0 to High(FGroups) do
     begin
       SetLength(FLastExecutedStates[I], Length(FGroups[I].NodeStates));
       for J := 0 to High(FGroups[I].NodeStates) do
         FLastExecutedStates[I][J] := FGroups[I].NodeStates[J];
-      FLastGroupNames[I] := FGroups[I].Name;
     end;
+    FStatesInitialized := True;
   finally
     LeaveCriticalSection(FCriticalSection);
+  end;
+
+  // Запускаем команды для изменившихся узлов уже вне CS
+  for I := 0 to CmdCount - 1 do
+  begin
+    NodeInfo := FNodeManager.GetNodeById(Commands[I].NodeId);
+    if NodeInfo.Id = 0 then Continue;
+    if Trim(NodeInfo.Command) = '' then Continue;
+    GroupDebugLog('Executing command for node ' + IntToStr(NodeInfo.Id) + ' (' + NodeInfo.Name + ') state changed');
+    FNodeManager.ExecuteNodeCommand(NodeInfo, Commands[I].GroupName);
   end;
 end;
 
@@ -259,7 +246,7 @@ begin
         Exit;
       end;
     end;
-    FillChar(Result, SizeOf(Result), 0);
+    Result := Default(TGroupInfo);  // запись содержит managed-поля — не FillChar
   finally
     LeaveCriticalSection(FCriticalSection);
   end;

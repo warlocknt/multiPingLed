@@ -44,6 +44,7 @@
 /output/
 /backup/
 /tests/
+/other/
 
 # Operating system files
 .DS_Store
@@ -61,3 +62,5 @@ desktop.ini
 
 # Screenshots / временные ресурсы (опционально)
 /promts/*
+resume.cmd
+promt.txt

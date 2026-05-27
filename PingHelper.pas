@@ -68,7 +68,6 @@ type
   end;
 
 var
-  hIcmp: THandle = INVALID_HANDLE_VALUE;
   WSAInitialized: Boolean = False;
   WSAData: TWSAData;
 
@@ -102,11 +101,6 @@ end;
 
 procedure CleanupPingHelper;
 begin
-  if hIcmp <> INVALID_HANDLE_VALUE then
-  begin
-    IcmpCloseHandle(hIcmp);
-    hIcmp := INVALID_HANDLE_VALUE;
-  end;
   if WSAInitialized then
   begin
     WSACleanup;
@@ -121,77 +115,84 @@ var
   IPAddr: DWORD;
   PingResult: DWORD;
   pEchoReply: PICMP_ECHO_REPLY;
+  LocalIcmp: THandle;
 begin
   Result.Success := False;
   Result.ResponseTime := -1;
   Result.ErrorMessage := '';
 
-  if hIcmp = INVALID_HANDLE_VALUE then
+  // Собственный ICMP-хэндл на каждый вызов: общий глобальный хэндл не
+  // потокобезопасен при одновременных IcmpSendEcho из разных потоков пинга.
+  LocalIcmp := IcmpCreateFile;
+  if LocalIcmp = INVALID_HANDLE_VALUE then
   begin
     Result.ErrorMessage := 'Failed to create ICMP handle';
     Exit;
   end;
 
-  // Получаем IP адрес хоста
-  IPAddr := GetHostIP(Host);
-  if IPAddr = 0 then
-  begin
-    Result.ErrorMessage := 'Cannot resolve host: ' + Host;
-    Exit;
-  end;
-
-  // Размер буфера для ответа
-  ReplySize := SizeOf(TICMP_ECHO_REPLY) + 32;
-  GetMem(ReplyBuffer, ReplySize);
-
   try
-    // Отправляем ICMP echo request
-    PingResult := IcmpSendEcho(
-      hIcmp,
-      IPAddr,
-      nil, 0,           // Нет данных
-      nil,              // Опции по умолчанию
-      ReplyBuffer,
-      ReplySize,
-      TimeoutMs
-    );
+    // Получаем IP адрес хоста
+    IPAddr := GetHostIP(Host);
+    if IPAddr = 0 then
+    begin
+      Result.ErrorMessage := 'Cannot resolve host: ' + Host;
+      Exit;
+    end;
 
-    if PingResult = 0 then
-    begin
-      // Ошибка
-      PingResult := GetLastError;
-      case PingResult of
-        IP_REQ_TIMED_OUT: Result.ErrorMessage := 'Request timed out';
-        IP_DEST_HOST_UNREACHABLE: Result.ErrorMessage := 'Host unreachable';
-        IP_DEST_NET_UNREACHABLE: Result.ErrorMessage := 'Network unreachable';
-        else Result.ErrorMessage := 'Ping failed: ' + IntToStr(PingResult);
-      end;
-    end
-    else
-    begin
-      // Успех
-      pEchoReply := PICMP_ECHO_REPLY(ReplyBuffer);
-      if pEchoReply^.Status = IP_SUCCESS then
+    // Размер буфера для ответа
+    ReplySize := SizeOf(TICMP_ECHO_REPLY) + 32;
+    GetMem(ReplyBuffer, ReplySize);
+
+    try
+      // Отправляем ICMP echo request
+      PingResult := IcmpSendEcho(
+        LocalIcmp,
+        IPAddr,
+        nil, 0,           // Нет данных
+        nil,              // Опции по умолчанию
+        ReplyBuffer,
+        ReplySize,
+        TimeoutMs
+      );
+
+      if PingResult = 0 then
       begin
-        Result.Success := True;
-        Result.ResponseTime := pEchoReply^.RoundTripTime;
+        // Ошибка
+        PingResult := GetLastError;
+        case PingResult of
+          IP_REQ_TIMED_OUT: Result.ErrorMessage := 'Request timed out';
+          IP_DEST_HOST_UNREACHABLE: Result.ErrorMessage := 'Host unreachable';
+          IP_DEST_NET_UNREACHABLE: Result.ErrorMessage := 'Network unreachable';
+          else Result.ErrorMessage := 'Ping failed: ' + IntToStr(PingResult);
+        end;
       end
       else
       begin
-        Result.ErrorMessage := 'Ping status: ' + IntToStr(pEchoReply^.Status);
+        // Успех
+        pEchoReply := PICMP_ECHO_REPLY(ReplyBuffer);
+        if pEchoReply^.Status = IP_SUCCESS then
+        begin
+          Result.Success := True;
+          Result.ResponseTime := pEchoReply^.RoundTripTime;
+        end
+        else
+        begin
+          Result.ErrorMessage := 'Ping status: ' + IntToStr(pEchoReply^.Status);
+        end;
       end;
-    end;
 
+    finally
+      FreeMem(ReplyBuffer);
+    end;
   finally
-    FreeMem(ReplyBuffer);
+    IcmpCloseHandle(LocalIcmp);
   end;
 end;
 
 initialization
-  // Инициализируем один раз до старта потоков — исключает гонку между потоками
+  // WSAStartup для резолва имён можно инициализировать глобально один раз.
   if WSAStartup($0202, WSAData) = 0 then
     WSAInitialized := True;
-  hIcmp := IcmpCreateFile;
 
 finalization
   CleanupPingHelper;

@@ -248,8 +248,9 @@ var
   FirstNodeName: string;
   LeftName, RightName: string;
 begin
+  Result := '';
   if FNodeManager = nil then Exit;
-  
+
   GroupName := Group.Name;
   
   // Для группы 3x3 используем сверхкомпактный формат - только имена
@@ -498,7 +499,7 @@ end;
 
 procedure TTrayController.UpdateTrayIcons;
 var
-  I: Integer;
+  I, IconIdx: Integer;
   Groups: TGroupArray;
   NewIcon: TIcon;
   J: Integer;
@@ -523,38 +524,44 @@ begin
   // Обновляем каждую иконку группы
   for I := 0 to High(Groups) do
   begin
-    if I > High(FGroupIcons) then Break;
-    if FGroupIcons[I] = nil then Continue;
+    // Иконку и её состояния адресуем по Id группы, а не по позиции I:
+    // после SyncGroups порядок FGroupIcons/FLastGroupStates (они параллельны)
+    // не совпадает с порядком Groups из конфига.
+    IconIdx := FindIconIndexByGroupId(Groups[I].Id);
+    if IconIdx < 0 then Continue;
+    if FGroupIcons[IconIdx] = nil then Continue;
 
     // Рисуем новую иконку с текущими состояниями
     NewIcon := TIconRenderer.RenderGroupIcon(Groups[I]);
     try
       if (NewIcon <> nil) and (NewIcon.Handle <> 0) then
       begin
-        FGroupIcons[I].Icon.Assign(NewIcon);
-        FGroupIcons[I].Hint := BuildGroupHint(Groups[I]);  // Обновляем подсказку
+        FGroupIcons[IconIdx].Icon.Assign(NewIcon);
+        FGroupIcons[IconIdx].Hint := BuildGroupHint(Groups[I]);  // Обновляем подсказку
         // Иконка уже показана, просто обновляем
       end;
     finally
       NewIcon.Free;
     end;
 
+    if IconIdx >= Length(FLastGroupStates) then Continue;
+
     // Показываем balloon для каждого узла, чьё состояние изменилось.
     // Пропускаем переходы из nsUnknown — это стартовая инициализация.
     for J := 0 to High(Groups[I].NodeStates) do
     begin
-      if J >= Length(FLastGroupStates[I]) then Continue;
-      OldState := FLastGroupStates[I][J];
+      if J >= Length(FLastGroupStates[IconIdx]) then Continue;
+      OldState := FLastGroupStates[IconIdx][J];
       if (Groups[I].NodeStates[J] <> OldState) and (OldState <> ConfigManager.nsUnknown) then
-        ShowStatusBalloon(I, Groups[I].NodeIds[J], Groups[I].NodeStates[J]);
+        ShowStatusBalloon(IconIdx, Groups[I].NodeIds[J], Groups[I].NodeStates[J]);
     end;
 
     // Сохраняем текущие состояния для сравнения в следующий раз.
     // Подгоняем длину под актуальный NodeStates — иначе новые узлы не отслеживаются.
-    if Length(FLastGroupStates[I]) <> Length(Groups[I].NodeStates) then
-      SetLength(FLastGroupStates[I], Length(Groups[I].NodeStates));
+    if Length(FLastGroupStates[IconIdx]) <> Length(Groups[I].NodeStates) then
+      SetLength(FLastGroupStates[IconIdx], Length(Groups[I].NodeStates));
     for J := 0 to High(Groups[I].NodeStates) do
-      FLastGroupStates[I][J] := Groups[I].NodeStates[J];
+      FLastGroupStates[IconIdx][J] := Groups[I].NodeStates[J];
   end;
   DebugLog('UpdateTrayIcons completed');
 end;
@@ -758,7 +765,7 @@ end;
 
 function TTrayController.GroupStatesChanged: Boolean;
 var
-  I, J: Integer;
+  I, J, IconIdx: Integer;
   Groups: TGroupArray;
 begin
   Result := False;
@@ -777,13 +784,24 @@ begin
     Exit;
   end;
 
-  // Проверяем каждое состояние узла
+  // Проверяем каждое состояние узла. Состояния адресуем по Id группы (через
+  // индекс иконки), а не по позиции — порядок FLastGroupStates после SyncGroups
+  // не совпадает с порядком Groups из конфига.
   for I := 0 to High(Groups) do
   begin
+    IconIdx := FindIconIndexByGroupId(Groups[I].Id);
+    if IconIdx < 0 then
+    begin
+      // Группа без иконки (новая) — нужно обновление
+      Result := True;
+      Exit;
+    end;
+    if IconIdx >= Length(FLastGroupStates) then Continue;
+
     for J := 0 to High(Groups[I].NodeStates) do
     begin
-      if J < Length(FLastGroupStates[I]) then
-        if Groups[I].NodeStates[J] <> FLastGroupStates[I][J] then
+      if J < Length(FLastGroupStates[IconIdx]) then
+        if Groups[I].NodeStates[J] <> FLastGroupStates[IconIdx][J] then
         begin
           Result := True;
           Exit;

@@ -176,6 +176,20 @@ begin
     Lines.Add('menu_exit=Exit');
     Lines.Add('menu_about=About');
     Lines.Add('about_close=Close');
+    Lines.Add('tab_settings=Settings');
+    Lines.Add('label_command_on_change=Command on status change:');
+    Lines.Add('label_balloon_hint=Show balloon notifications');
+    Lines.Add('label_run_on_ping_fail=Run on ping loss');
+    Lines.Add('label_run_on_ping_restore=Run on ping restore');
+    Lines.Add('status_ok=OK');
+    Lines.Add('status_fail=FAIL');
+    Lines.Add('state_up=Online');
+    Lines.Add('state_down=Offline');
+    Lines.Add('update_available=Update available: %s');
+    Lines.Add('update_check_failed=Update check failed');
+    Lines.Add('update_none=You have the latest version');
+    Lines.Add('title_config_error=Configuration Error');
+    Lines.Add('title_init_error=Initialization Error');
     Lines.SaveToFile(FileName);
   finally
     Lines.Free;
@@ -240,6 +254,20 @@ begin
     Lines.Add('menu_exit=Выход');
     Lines.Add('menu_about=О программе');
     Lines.Add('about_close=Закрыть');
+    Lines.Add('tab_settings=Настройки');
+    Lines.Add('label_command_on_change=Команда при смене статуса:');
+    Lines.Add('label_balloon_hint=Показывать всплывающие уведомления');
+    Lines.Add('label_run_on_ping_fail=Выполнить при потере пинга');
+    Lines.Add('label_run_on_ping_restore=Выполнить при восстановлении пинга');
+    Lines.Add('status_ok=OK');
+    Lines.Add('status_fail=Сбой');
+    Lines.Add('state_up=В сети');
+    Lines.Add('state_down=Не в сети');
+    Lines.Add('update_available=Доступно обновление: %s');
+    Lines.Add('update_check_failed=Не удалось проверить обновления');
+    Lines.Add('update_none=У вас последняя версия');
+    Lines.Add('title_config_error=Ошибка конфигурации');
+    Lines.Add('title_init_error=Ошибка инициализации');
     Lines.SaveToFile(FileName);
   finally
     Lines.Free;
@@ -304,6 +332,20 @@ begin
     Lines.Add('menu_exit=Beenden');
     Lines.Add('menu_about=Über');
     Lines.Add('about_close=Schließen');
+    Lines.Add('tab_settings=Einstellungen');
+    Lines.Add('label_command_on_change=Befehl bei Statusänderung:');
+    Lines.Add('label_balloon_hint=Sprechblasen-Benachrichtigungen anzeigen');
+    Lines.Add('label_run_on_ping_fail=Bei Ping-Verlust ausführen');
+    Lines.Add('label_run_on_ping_restore=Bei Ping-Wiederherstellung ausführen');
+    Lines.Add('status_ok=OK');
+    Lines.Add('status_fail=Fehler');
+    Lines.Add('state_up=Online');
+    Lines.Add('state_down=Offline');
+    Lines.Add('update_available=Update verfügbar: %s');
+    Lines.Add('update_check_failed=Update-Prüfung fehlgeschlagen');
+    Lines.Add('update_none=Sie haben die neueste Version');
+    Lines.Add('title_config_error=Konfigurationsfehler');
+    Lines.Add('title_init_error=Initialisierungsfehler');
     Lines.SaveToFile(FileName);
   finally
     Lines.Free;
@@ -368,6 +410,20 @@ begin
     Lines.Add('menu_exit=Quitter');
     Lines.Add('menu_about=À propos');
     Lines.Add('about_close=Fermer');
+    Lines.Add('tab_settings=Paramètres');
+    Lines.Add('label_command_on_change=Commande au changement de statut:');
+    Lines.Add('label_balloon_hint=Afficher les notifications');
+    Lines.Add('label_run_on_ping_fail=Exécuter à la perte du ping');
+    Lines.Add('label_run_on_ping_restore=Exécuter à la restauration du ping');
+    Lines.Add('status_ok=OK');
+    Lines.Add('status_fail=Échec');
+    Lines.Add('state_up=En ligne');
+    Lines.Add('state_down=Hors ligne');
+    Lines.Add('update_available=Mise à jour disponible: %s');
+    Lines.Add('update_check_failed=Échec de la vérification des mises à jour');
+    Lines.Add('update_none=Vous avez la dernière version');
+    Lines.Add('title_config_error=Erreur de configuration');
+    Lines.Add('title_init_error=Erreur dinitialisation');
     Lines.SaveToFile(FileName);
   finally
     Lines.Free;
@@ -432,6 +488,20 @@ begin
     Lines.Add('menu_exit=Шығу');
     Lines.Add('menu_about=Бағдарлама туралы');
     Lines.Add('about_close=Жабу');
+    Lines.Add('tab_settings=Параметрлер');
+    Lines.Add('label_command_on_change=Күй өзгергендегі команда:');
+    Lines.Add('label_balloon_hint=Қалқымалы хабарламаларды көрсету');
+    Lines.Add('label_run_on_ping_fail=Пинг жоғалғанда орындау');
+    Lines.Add('label_run_on_ping_restore=Пинг қалпына келгенде орындау');
+    Lines.Add('status_ok=OK');
+    Lines.Add('status_fail=Қате');
+    Lines.Add('state_up=Желіде');
+    Lines.Add('state_down=Желіде емес');
+    Lines.Add('update_available=Жаңарту қолжетімді: %s');
+    Lines.Add('update_check_failed=Жаңартуды тексеру сәтсіз аяқталды');
+    Lines.Add('update_none=Сізде соңғы нұсқа');
+    Lines.Add('title_config_error=Конфигурация қатесі');
+    Lines.Add('title_init_error=Инициализация қатесі');
     Lines.SaveToFile(FileName);
   finally
     Lines.Free;
