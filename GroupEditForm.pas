@@ -6,7 +6,7 @@ interface
 
 uses
   Classes, SysUtils, Forms, Controls, Graphics, Dialogs, StdCtrls, CheckLst,
-  ConfigManager, LangManager;
+  ComCtrls, ConfigManager, LangManager;
 
 type
 
@@ -51,11 +51,9 @@ begin
   cbType.OnChange := @OnTypeChange;
 end;
 
-
 procedure TGroupEditForm.OnNodeCheckClick(Sender: TObject);
 begin
   UpdateCounter;
-
 end;
 
 procedure TGroupEditForm.OnTypeChange(Sender: TObject);
@@ -138,11 +136,18 @@ procedure TGroupEditForm.UpdateCounter;
 var
   Count, MinCount, MaxCount: Integer;
 begin
-  // Тип группы выбирает пользователь (cbType). Здесь НЕ трогаем cbType.ItemIndex,
-  // иначе возникает петля с cbType.OnChange и пользователь не может свободно
-  // выбрать тип. Только показываем, сколько узлов выбрано относительно диапазона
-  // выбранного типа.
+  // тип группы выбираем динамически, если выбрано больше 9, то красным
   Count := GetSelectedCount;
+  case Count of
+    0..1: cbType.ItemIndex:=0;
+    2..4: cbType.ItemIndex:=1;
+    5..9: cbType.ItemIndex:=2;
+    else
+      cbType.ItemIndex:=2;
+    end;
+
+  Application.ProcessMessages;
+
   MinCount := GetMinCount;
   MaxCount := GetRequiredCount;
 

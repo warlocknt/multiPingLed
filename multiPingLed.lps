@@ -3,7 +3,7 @@
   <ProjectSession>
     <PathDelim Value="\"/>
     <Version Value="12"/>
-    <BuildModes Active="Release"/>
+    <BuildModes Active="Debug"/>
     <Units>
       <Unit>
         <Filename Value="multiPingLed.lpr"/>
@@ -94,8 +94,10 @@
         <ComponentName Value="GroupEditForm"/>
         <HasResources Value="True"/>
         <ResourceBaseClass Value="Form"/>
+        <IsVisibleTab Value="True"/>
         <EditorIndex Value="5"/>
-        <CursorPos Y="2"/>
+        <TopLine Value="10"/>
+        <CursorPos Y="27"/>
         <UsageCount Value="224"/>
         <Loaded Value="True"/>
         <LoadedDesigner Value="True"/>
@@ -107,10 +109,9 @@
         <HasResources Value="True"/>
         <ResourceBaseClass Value="Form"/>
         <UnitName Value="AboutUnit"/>
-        <IsVisibleTab Value="True"/>
         <EditorIndex Value="8"/>
         <TopLine Value="103"/>
-        <CursorPos Y="106"/>
+        <CursorPos X="21" Y="112"/>
         <UsageCount Value="354"/>
         <Loaded Value="True"/>
         <LoadedDesigner Value="True"/>
@@ -141,130 +142,129 @@
         <EditorIndex Value="11"/>
         <TopLine Value="66"/>
         <CursorPos Y="71"/>
-        <UsageCount Value="71"/>
+        <UsageCount Value="94"/>
         <Loaded Value="True"/>
       </Unit>
     </Units>
     <JumpHistory HistoryIndex="29">
       <Position>
-        <Filename Value="AppCore.pas"/>
-        <Caret Line="525" TopLine="524"/>
+        <Filename Value="GroupEditForm.pas"/>
+        <Caret Line="57" Column="16" TopLine="29"/>
       </Position>
       <Position>
-        <Filename Value="AppCore.pas"/>
-        <Caret Line="548" TopLine="524"/>
+        <Filename Value="GroupEditForm.pas"/>
+        <Caret Line="62" Column="16" TopLine="34"/>
       </Position>
       <Position>
-        <Filename Value="AppCore.pas"/>
-        <Caret Line="448" TopLine="430"/>
+        <Filename Value="GroupEditForm.pas"/>
+        <Caret Line="99" Column="16" TopLine="71"/>
       </Position>
       <Position>
-        <Filename Value="AppCore.pas"/>
-        <Caret Line="549" TopLine="533"/>
+        <Filename Value="GroupEditForm.pas"/>
+        <Caret Line="150" Column="21" TopLine="142"/>
       </Position>
       <Position>
-        <Filename Value="AppCore.pas"/>
-        <Caret Line="448" TopLine="430"/>
+        <Filename Value="GroupEditForm.pas"/>
+        <Caret Line="78" Column="31" TopLine="73"/>
       </Position>
       <Position>
-        <Filename Value="AppCore.pas"/>
-        <Caret Line="549" TopLine="533"/>
+        <Filename Value="GroupEditForm.pas"/>
+        <Caret Line="62" Column="16" TopLine="54"/>
       </Position>
       <Position>
-        <Filename Value="AppCore.pas"/>
-        <Caret Line="389" TopLine="371"/>
+        <Filename Value="GroupEditForm.pas"/>
       </Position>
       <Position>
-        <Filename Value="AppCore.pas"/>
-        <Caret Line="391" TopLine="371"/>
+        <Filename Value="GroupEditForm.pas"/>
+        <Caret Line="30" Column="28" TopLine="2"/>
       </Position>
       <Position>
-        <Filename Value="AppCore.pas"/>
-        <Caret Line="393" TopLine="371"/>
+        <Filename Value="GroupEditForm.pas"/>
+        <Caret Line="57" Column="16" TopLine="29"/>
       </Position>
       <Position>
-        <Filename Value="AppCore.pas"/>
-        <Caret Line="392" TopLine="371"/>
+        <Filename Value="GroupEditForm.pas"/>
+        <Caret Line="62" Column="16" TopLine="34"/>
       </Position>
       <Position>
-        <Filename Value="AppCore.pas"/>
-        <Caret Line="393" TopLine="371"/>
+        <Filename Value="GroupEditForm.pas"/>
+        <Caret Line="99" Column="16" TopLine="71"/>
       </Position>
       <Position>
-        <Filename Value="AppCore.pas"/>
-        <Caret Line="392" TopLine="371"/>
+        <Filename Value="GroupEditForm.pas"/>
+        <Caret Line="150" Column="56" TopLine="135"/>
       </Position>
       <Position>
-        <Filename Value="AppCore.pas"/>
-        <Caret Line="393" TopLine="371"/>
+        <Filename Value="GroupEditForm.pas"/>
+        <Caret Line="141" TopLine="135"/>
       </Position>
       <Position>
-        <Filename Value="AppCore.pas"/>
-        <Caret Line="392" TopLine="371"/>
+        <Filename Value="GroupEditForm.pas"/>
+        <Caret Line="142" TopLine="135"/>
       </Position>
       <Position>
-        <Filename Value="AppCore.pas"/>
-        <Caret Line="397" TopLine="371"/>
+        <Filename Value="GroupEditForm.pas"/>
+        <Caret Line="143" TopLine="135"/>
       </Position>
       <Position>
-        <Filename Value="aboutunit.pas"/>
-        <Caret Line="46" Column="3" TopLine="28"/>
+        <Filename Value="GroupEditForm.pas"/>
+        <Caret Line="150" TopLine="135"/>
       </Position>
       <Position>
-        <Filename Value="aboutunit.pas"/>
-        <Caret Line="101" Column="5" TopLine="94"/>
+        <Filename Value="GroupEditForm.pas"/>
+        <Caret Line="151" TopLine="135"/>
       </Position>
       <Position>
-        <Filename Value="aboutunit.pas"/>
-        <Caret Line="96" Column="37" TopLine="92"/>
+        <Filename Value="GroupEditForm.pas"/>
+        <Caret Line="153" TopLine="135"/>
       </Position>
       <Position>
-        <Filename Value="aboutunit.pas"/>
-        <Caret Line="112" Column="16" TopLine="92"/>
+        <Filename Value="GroupEditForm.pas"/>
+        <Caret Line="155" TopLine="135"/>
       </Position>
       <Position>
-        <Filename Value="aboutunit.pas"/>
-        <Caret Line="96" Column="64" TopLine="89"/>
+        <Filename Value="GroupEditForm.pas"/>
+        <Caret Line="158" TopLine="135"/>
       </Position>
       <Position>
-        <Filename Value="aboutunit.pas"/>
-        <Caret Line="105" Column="40" TopLine="89"/>
+        <Filename Value="GroupEditForm.pas"/>
+        <Caret Line="150" Column="30" TopLine="133"/>
       </Position>
       <Position>
-        <Filename Value="aboutunit.pas"/>
-        <Caret Line="17" Column="3"/>
+        <Filename Value="GroupEditForm.pas"/>
+        <Caret Line="145" Column="27" TopLine="133"/>
       </Position>
       <Position>
-        <Filename Value="aboutunit.pas"/>
-        <Caret Line="52" Column="53" TopLine="35"/>
+        <Filename Value="GroupEditForm.pas"/>
+        <Caret Line="153" Column="27" TopLine="141"/>
       </Position>
       <Position>
-        <Filename Value="AppCore.pas"/>
-        <Caret Line="405" Column="34" TopLine="376"/>
+        <Filename Value="GroupEditForm.pas"/>
+        <Caret Line="59" Column="37" TopLine="56"/>
       </Position>
       <Position>
-        <Filename Value="AppCore.pas"/>
-        <Caret Line="394" Column="18" TopLine="377"/>
+        <Filename Value="GroupEditForm.pas"/>
+        <Caret Line="156" Column="23" TopLine="132"/>
       </Position>
       <Position>
-        <Filename Value="AppCore.pas"/>
-        <Caret Line="393" Column="122" TopLine="377"/>
+        <Filename Value="GroupEditForm.pas"/>
+        <Caret Line="157" Column="23" TopLine="133"/>
       </Position>
       <Position>
-        <Filename Value="aboutunit.pas"/>
-        <Caret Line="120" Column="56" TopLine="108"/>
+        <Filename Value="GroupEditForm.pas"/>
+        <Caret Line="148" Column="88" TopLine="132"/>
       </Position>
       <Position>
-        <Filename Value="aboutunit.pas"/>
-        <Caret Line="65" Column="56" TopLine="45"/>
+        <Filename Value="GroupEditForm.pas"/>
+        <Caret Line="147" Column="88" TopLine="131"/>
       </Position>
       <Position>
-        <Filename Value="aboutunit.pas"/>
-        <Caret Line="37" Column="70" TopLine="24"/>
+        <Filename Value="GroupEditForm.pas"/>
+        <Caret Line="146" Column="88" TopLine="130"/>
       </Position>
       <Position>
-        <Filename Value="aboutunit.pas"/>
-        <Caret Line="39" Column="70" TopLine="25"/>
+        <Filename Value="GroupEditForm.pas"/>
+        <Caret Line="55" TopLine="41"/>
       </Position>
     </JumpHistory>
     <RunParams>

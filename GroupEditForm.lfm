@@ -8,7 +8,7 @@ object GroupEditForm: TGroupEditForm
   ClientHeight = 360
   ClientWidth = 400
   Position = poScreenCenter
-  LCLVersion = '4.4.0.0'
+  LCLVersion = '4.6.0.0'
   object lblName: TLabel
     Left = 8
     Height = 15

@@ -18,10 +18,10 @@ object SettingsForm: TSettingsForm
     Height = 312
     Top = 4
     Width = 575
-    ActivePage = TabSheet1
+    ActivePage = NodesTab
     Align = alClient
     BorderSpacing.Around = 4
-    TabIndex = 2
+    TabIndex = 0
     TabOrder = 0
     object NodesTab: TTabSheet
       Caption = 'Nodes'
