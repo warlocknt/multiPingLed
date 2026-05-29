@@ -52,8 +52,6 @@ label_language=Язык:
 menu_settings=Настройки
 menu_exit=Выход
 menu_about=О программе
-
-about_copyright=Copyright\u00a9 2026 warlocknt
 about_close=Закрыть
 title_init_error=Ошибка инициализации
 title_config_error=Ошибка конфигурации
@@ -69,3 +67,5 @@ label_command_on_change=Команда при изменении доступн�
 label_balloon_hint=Оповещать о смене статуса узла с помощью balloon hint
 label_run_on_ping_fail=Выполнить при потере пинга
 label_run_on_ping_restore=Выполнить при восстановлении пинга
+update_balloon_title=Доступна новая версия
+update_balloon_text=На GitHub доступна версия %s

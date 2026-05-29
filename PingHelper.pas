@@ -9,12 +9,12 @@ uses
 
 type
   TPingResult = record
-    Success: Boolean;
-    ResponseTime: Integer;
+    Success: boolean;
+    ResponseTime: integer;
     ErrorMessage: string;
   end;
 
-function PingHost(const Host: string; TimeoutMs: Integer): TPingResult;
+function PingHost(const Host: string; TimeoutMs: integer): TPingResult;
 
 implementation
 
@@ -43,47 +43,42 @@ const
 
 type
   PICMP_ECHO_REPLY = ^TICMP_ECHO_REPLY;
+
   TICMP_ECHO_REPLY = record
     Address: DWORD;
     Status: DWORD;
     RoundTripTime: DWORD;
-    DataSize: WORD;
-    Reserved: WORD;
+    DataSize: word;
+    Reserved: word;
     Data: Pointer;
     Options: record
-      Ttl: BYTE;
-      Tos: BYTE;
-      Flags: BYTE;
-      OptionsSize: BYTE;
+      Ttl: byte;
+      Tos: byte;
+      Flags: byte;
+      OptionsSize: byte;
       OptionsData: Pointer;
-    end;
+      end;
   end;
 
   TIpOptionInformation = record
-    Ttl: BYTE;
-    Tos: BYTE;
-    Flags: BYTE;
-    OptionsSize: BYTE;
-    OptionsData: PChar;
+    Ttl: byte;
+    Tos: byte;
+    Flags: byte;
+    OptionsSize: byte;
+    OptionsData: pchar;
   end;
 
 var
-  WSAInitialized: Boolean = False;
+  WSAInitialized: boolean = False;
   WSAData: TWSAData;
 
 // Импортируем функции из iphlpapi.dll
 function IcmpCreateFile: THandle; stdcall; external 'iphlpapi.dll';
 function IcmpCloseHandle(IcmpHandle: THandle): BOOL; stdcall; external 'iphlpapi.dll';
-function IcmpSendEcho(
-  IcmpHandle: THandle;
-  DestinationAddress: DWORD;
-  RequestData: Pointer;
-  RequestSize: WORD;
-  RequestOptions: Pointer;
-  ReplyBuffer: Pointer;
-  ReplySize: DWORD;
-  Timeout: DWORD
-): DWORD; stdcall; external 'iphlpapi.dll';
+function IcmpSendEcho(IcmpHandle: THandle; DestinationAddress: DWORD;
+  RequestData: Pointer; RequestSize: word; RequestOptions: Pointer;
+  ReplyBuffer: Pointer; ReplySize: DWORD; Timeout: DWORD): DWORD;
+  stdcall; external 'iphlpapi.dll';
 
 function GetHostIP(const Host: string): DWORD;
 var
@@ -108,7 +103,7 @@ begin
   end;
 end;
 
-function PingHost(const Host: string; TimeoutMs: Integer): TPingResult;
+function PingHost(const Host: string; TimeoutMs: integer): TPingResult;
 var
   ReplySize: DWORD;
   ReplyBuffer: Pointer;
@@ -145,15 +140,10 @@ begin
 
     try
       // Отправляем ICMP echo request
-      PingResult := IcmpSendEcho(
-        LocalIcmp,
-        IPAddr,
+      PingResult := IcmpSendEcho(LocalIcmp, IPAddr,
         nil, 0,           // Нет данных
         nil,              // Опции по умолчанию
-        ReplyBuffer,
-        ReplySize,
-        TimeoutMs
-      );
+        ReplyBuffer, ReplySize, TimeoutMs);
 
       if PingResult = 0 then
       begin
@@ -163,7 +153,8 @@ begin
           IP_REQ_TIMED_OUT: Result.ErrorMessage := 'Request timed out';
           IP_DEST_HOST_UNREACHABLE: Result.ErrorMessage := 'Host unreachable';
           IP_DEST_NET_UNREACHABLE: Result.ErrorMessage := 'Network unreachable';
-          else Result.ErrorMessage := 'Ping failed: ' + IntToStr(PingResult);
+          else
+            Result.ErrorMessage := 'Ping failed: ' + IntToStr(PingResult);
         end;
       end
       else

@@ -6,7 +6,13 @@ interface
 
 uses
   Classes, SysUtils, Forms, Controls, Graphics, StdCtrls, ExtCtrls, Dialogs,
-  ComCtrls, Menus, ConfigManager, NodeEditForm, GroupEditForm, LangManager;
+  ComCtrls, Menus, ConfigManager, NodeEditForm, GroupEditForm, LangManager, Clipbrd;
+
+type
+  TMacroInfo = record
+    Name: string;        // например, '{host}'
+    Description: string; // например, 'IP-адрес или DNS-имя узла'
+  end;
 
 type
 
@@ -18,7 +24,6 @@ type
     eCommandExec: TEdit;
     lCommandExec: TLabel;
     lLang: TLabel;
-    Memo1: TMemo;
     PageControl: TPageControl;
     NodesTab: TTabSheet;
     GroupsTab: TTabSheet;
@@ -40,6 +45,7 @@ type
     btnDeleteGroup: TButton;
     btnApply: TButton;
     btnCancel: TButton;
+    MacrosHintPanel: TPanel;
     SettingsFormButtonsPanel: TPanel;
     TabSheet1: TTabSheet;
 
@@ -57,23 +63,30 @@ type
     procedure btnImportNodesClick(Sender: TObject);
     procedure btnExportNodesClick(Sender: TObject);
     procedure GroupsListItemChecked(Sender: TObject; Item: TListItem);
-    procedure NodesListSelectItem(Sender: TObject; Item: TListItem; Selected: Boolean);
-    procedure GroupsListSelectItem(Sender: TObject; Item: TListItem; Selected: Boolean);
+    procedure MacrosHintPanelClick(Sender: TObject);
+    procedure NodesListSelectItem(Sender: TObject; Item: TListItem; Selected: boolean);
+    procedure GroupsListSelectItem(Sender: TObject; Item: TListItem; Selected: boolean);
+    procedure BuildMacrosHint;
+    procedure OnMacroLabelClick(Sender: TObject);
+    procedure OnMacroMouseEnter(Sender: TObject);
+    procedure OnMacroMouseLeave(Sender: TObject);
+    procedure OnCopiedTimer(Sender: TObject);
   private
     FConfig: TAppConfig;
     FOnApply: TNotifyEvent;
     FOnLanguageChanged: TNotifyEvent;
     FConfigManager: TConfigManager;
-    FModified: Boolean;
-    FLoading: Boolean;
-
+    FModified: boolean;
+    FLoading: boolean;
+    FCopiedLabel: TLabel;
+    FCopiedTimer: TTimer;
     procedure SetupEvents;
     procedure ApplyLocalization;
     procedure RefreshNodesList;
     procedure RefreshGroupsList;
-    function IsHostExists(const Host: string; ExcludeIndex: Integer = -1): Boolean;
-    function GetNextNodeId: Integer;
-    function GetNextGroupId: Integer;
+    function IsHostExists(const Host: string; ExcludeIndex: integer = -1): boolean;
+    function GetNextNodeId: integer;
+    function GetNextGroupId: integer;
     procedure LoadNodeCommandFields;
     procedure SaveNodeCommandFields;
     procedure eCommandChange(Sender: TObject);
@@ -81,9 +94,32 @@ type
   public
     procedure SetConfig(const Config: TAppConfig);
     property OnApply: TNotifyEvent read FOnApply write FOnApply;
-    property OnLanguageChanged: TNotifyEvent read FOnLanguageChanged write FOnLanguageChanged;
+    property OnLanguageChanged: TNotifyEvent
+      read FOnLanguageChanged write FOnLanguageChanged;
     property ConfigManager: TConfigManager read FConfigManager write FConfigManager;
   end;
+
+const
+  Macros: array of TMacroInfo = (
+    (Name: '{host}'; Description: 'IP-адрес или DNS-имя узла'),
+    (Name: '{name}'; Description: 'Имя узла из настроек'),
+    (Name: '{status}'; Description:
+    'Новый статус узла: up или down'),
+    (Name: '{group}'; Description:
+    'Имя группы, к которой относится узел'),
+    (Name: '{ping}'; Description:
+    'Время отклика последнего пинга, мс'),
+    (Name: '{last_ping_time}';
+    Description: 'Время пинга, вызвавшего смену статуса (YYYY-MM-DD HH:MM:SS)'),
+    (Name: '{exe_dir}'; Description:
+    'Папка с multiPingLed.exe (без \ на конце)'),
+    (Name: '{config_dir}'; Description:
+    'Папка с config.ini (без \ на конце)'),
+    (Name: '{datetime}'; Description:
+    'Текущее время в момент запуска команды (YYYY-MM-DD HH:MM:SS)'),
+    (Name: '{app_version}';
+    Description: 'Версия приложения (сейчас %s)')
+    );
 
 implementation
 
@@ -105,7 +141,12 @@ begin
   ApplyLocalization;
   FLoading := False;
   SettingsDebugLog('FormCreate done');
-  PageControl.TabIndex :=0 ;
+  PageControl.TabIndex := 0;
+
+  FCopiedTimer := TTimer.Create(Self);
+  FCopiedTimer.Interval := 1000;
+  FCopiedTimer.Enabled := False;
+  FCopiedTimer.OnTimer := @OnCopiedTimer;
 end;
 
 procedure TSettingsForm.FormShow(Sender: TObject);
@@ -116,6 +157,7 @@ begin
     LoadLanguageSelector;
     if Assigned(FConfigManager) and Assigned(cbBaloonHint) then
       cbBaloonHint.Checked := FConfigManager.GetBalloonHintEnabled;
+    BuildMacrosHint;
     ApplyLocalization;
   finally
     FLoading := False;
@@ -136,18 +178,18 @@ end;
 
 procedure TSettingsForm.LoadLanguageSelector;
 var
-  i: Integer;
+  i: integer;
   LangInfo: TLanguageInfo;
-  LangCount: Integer;
-  CurrentIdx: Integer;
+  LangCount: integer;
+  CurrentIdx: integer;
 begin
   cbSelectLanguage.Items.Clear;
-  
+
   if not Assigned(LangMgr) then Exit;
-  
+
   LangCount := LangMgr.GetLanguageCount;
   if LangCount = 0 then Exit;
-  
+
   CurrentIdx := -1;
   for i := 0 to LangCount - 1 do
   begin
@@ -156,18 +198,18 @@ begin
     if CompareText(LangInfo.Code, LangMgr.CurrentLanguage) = 0 then
       CurrentIdx := i;
   end;
-  
+
   if CurrentIdx >= 0 then
     cbSelectLanguage.ItemIndex := CurrentIdx
   else if cbSelectLanguage.Items.Count > 0 then
     cbSelectLanguage.ItemIndex := 0;
-    
+
   cbSelectLanguage.OnChange := @cbSelectLanguageChange;
 end;
 
 procedure TSettingsForm.cbSelectLanguageChange(Sender: TObject);
 var
-  Idx: Integer;
+  Idx: integer;
 begin
   if FLoading then Exit;
 
@@ -181,7 +223,7 @@ end;
 procedure TSettingsForm.ApplyLocalization;
 begin
   if not Assigned(LangMgr) then Exit;
-  
+
   Caption := _('settings_title');
 
   // Tab sheets
@@ -248,7 +290,8 @@ end;
 
 procedure TSettingsForm.SetConfig(const Config: TAppConfig);
 begin
-  SettingsDebugLog('SetConfig: ' + IntToStr(Length(Config.Nodes)) + ' nodes, ' + IntToStr(Length(Config.Groups)) + ' groups');
+  SettingsDebugLog('SetConfig: ' + IntToStr(Length(Config.Nodes)) +
+    ' nodes, ' + IntToStr(Length(Config.Groups)) + ' groups');
   FConfig := Config;
   RefreshNodesList;
   RefreshGroupsList;
@@ -258,7 +301,7 @@ end;
 
 procedure TSettingsForm.RefreshNodesList;
 var
-  I: Integer;
+  I: integer;
   Item: TListItem;
 begin
   NodesList.Items.Clear;
@@ -276,11 +319,11 @@ end;
 
 procedure TSettingsForm.RefreshGroupsList;
 var
-  I, J: Integer;
+  I, J: integer;
   Item: TListItem;
   NodeIdsStr: string;
   TypeStr: string;
-  Count: Integer;
+  Count: integer;
 begin
   GroupsList.Items.Clear;
 
@@ -314,7 +357,8 @@ begin
   end;
 end;
 
-procedure TSettingsForm.NodesListSelectItem(Sender: TObject; Item: TListItem; Selected: Boolean);
+procedure TSettingsForm.NodesListSelectItem(Sender: TObject; Item: TListItem;
+  Selected: boolean);
 begin
   btnEditNode.Enabled := Selected;
   btnDeleteNode.Enabled := Selected;
@@ -324,7 +368,7 @@ end;
 
 procedure TSettingsForm.LoadNodeCommandFields;
 var
-  SelIndex: Integer;
+  SelIndex: integer;
 begin
   if (NodesList.Selected = nil) or (NodesList.Selected.Index < 0) then
   begin
@@ -340,13 +384,14 @@ end;
 
 procedure TSettingsForm.SaveNodeCommandFields;
 var
-  SelIndex: Integer;
+  SelIndex: integer;
 begin
   if (NodesList.Selected = nil) or (NodesList.Selected.Index < 0) then Exit;
   SelIndex := NodesList.Selected.Index;
   if (SelIndex >= 0) and (SelIndex < Length(FConfig.Nodes)) then
   begin
-    if Assigned(eCommandExec) then FConfig.Nodes[SelIndex].Command := Trim(eCommandExec.Text);
+    if Assigned(eCommandExec) then FConfig.Nodes[SelIndex].Command :=
+        Trim(eCommandExec.Text);
   end;
 end;
 
@@ -357,15 +402,96 @@ begin
   FModified := True;
 end;
 
-procedure TSettingsForm.GroupsListSelectItem(Sender: TObject; Item: TListItem; Selected: Boolean);
+procedure TSettingsForm.GroupsListSelectItem(Sender: TObject;
+  Item: TListItem; Selected: boolean);
 begin
   btnEditGroup.Enabled := Selected;
   btnDeleteGroup.Enabled := Selected;
 end;
 
-function TSettingsForm.GetNextNodeId: Integer;
+procedure TSettingsForm.BuildMacrosHint;
+const
+  ColGap = 130;  // отступ описания от имени макроса
+  RowStep = 18;   // высота строки
 var
-  I: Integer;
+  I, Y: integer;
+  LblName, LblDesc: TLabel;
+begin
+  MacrosHintPanel.DisableAlign;
+  try
+    Y := 4;
+    for I := 0 to High(Macros) do
+    begin
+      // Кликабельное имя макроса
+      LblName := TLabel.Create(MacrosHintPanel);
+      LblName.Parent := MacrosHintPanel;
+      LblName.Left := 4;
+      LblName.Top := Y;
+      LblName.Caption := Macros[I].Name;
+      LblName.Font.Color := clBlue;
+      LblName.Cursor := crHandPoint;
+      LblName.Hint := _('hint_click_to_copy');
+      LblName.ShowHint := True;
+      LblName.OnClick := @OnMacroLabelClick;
+      LblName.OnMouseEnter := @OnMacroMouseEnter;
+      LblName.OnMouseLeave := @OnMacroMouseLeave;
+
+      // Описание — обычная статичная метка
+      LblDesc := TLabel.Create(MacrosHintPanel);
+      LblDesc.Parent := MacrosHintPanel;
+      LblDesc.Left := ColGap;
+      LblDesc.Top := Y;
+      if (Macros[I].Name = '{app_version}') and Assigned(FConfigManager) then
+        LblDesc.Caption := Format(Macros[I].Description, [FConfigManager.GetVersion])
+      else if Macros[I].Name = '{app_version}' then
+        LblDesc.Caption := Format(Macros[I].Description, ['?'])
+      else
+        LblDesc.Caption := Macros[I].Description;
+
+      Inc(Y, RowStep);
+    end;
+  finally
+    MacrosHintPanel.EnableAlign;
+  end;
+end;
+
+procedure TSettingsForm.OnMacroLabelClick(Sender: TObject);
+begin
+  Clipboard.AsText := (Sender as TLabel).Caption;
+  // Визуальный feedback
+  if FCopiedLabel <> nil then
+    FCopiedLabel.Font.Color := clBlue;
+  FCopiedLabel := Sender as TLabel;
+  FCopiedLabel.Font.Color := clGreen;
+  // Таймер вернёт цвет через секунду
+  FCopiedTimer.Enabled := False;
+  FCopiedTimer.Enabled := True;
+end;
+
+procedure TSettingsForm.OnMacroMouseEnter(Sender: TObject);
+begin
+  if Sender <> FCopiedLabel then
+    (Sender as TLabel).Font.Style := [fsUnderline];
+end;
+
+procedure TSettingsForm.OnMacroMouseLeave(Sender: TObject);
+begin
+  (Sender as TLabel).Font.Style := [];
+end;
+
+procedure TSettingsForm.OnCopiedTimer(Sender: TObject);
+begin
+  FCopiedTimer.Enabled := False;
+  if FCopiedLabel <> nil then
+  begin
+    FCopiedLabel.Font.Color := clBlue;
+    FCopiedLabel := nil;
+  end;
+end;
+
+function TSettingsForm.GetNextNodeId: integer;
+var
+  I: integer;
 begin
   Result := 1;
   for I := 0 to High(FConfig.Nodes) do
@@ -375,9 +501,9 @@ begin
   end;
 end;
 
-function TSettingsForm.GetNextGroupId: Integer;
+function TSettingsForm.GetNextGroupId: integer;
 var
-  I: Integer;
+  I: integer;
 begin
   Result := 1;
   for I := 0 to High(FConfig.Groups) do
@@ -387,9 +513,9 @@ begin
   end;
 end;
 
-function TSettingsForm.IsHostExists(const Host: string; ExcludeIndex: Integer): Boolean;
+function TSettingsForm.IsHostExists(const Host: string; ExcludeIndex: integer): boolean;
 var
-  I: Integer;
+  I: integer;
 begin
   Result := False;
   for I := 0 to High(FConfig.Nodes) do
@@ -404,10 +530,10 @@ end;
 
 procedure TSettingsForm.btnAddNodeClick(Sender: TObject);
 var
-  NewIndex: Integer;
+  NewIndex: integer;
   NewNode: TNodeConfig;
   ExistingHosts: array of string;
-  I: Integer;
+  I: integer;
   Dlg: TNodeEditForm;
 begin
   // Prepare list of existing hosts
@@ -429,7 +555,7 @@ begin
     Dlg.Caption := _('node_title_add');
     Dlg.SetData(NewNode, ExistingHosts, -1);
 
-    if Dlg.ShowModal = mrOK then
+    if Dlg.ShowModal = mrOk then
     begin
       // При провале валидации (пустой/дублирующийся хост) узел не сохраняем
       if Dlg.ValidateInput then
@@ -452,10 +578,10 @@ end;
 
 procedure TSettingsForm.btnEditNodeClick(Sender: TObject);
 var
-  SelIndex: Integer;
+  SelIndex: integer;
   EditedNode: TNodeConfig;
   ExistingHosts: array of string;
-  I: Integer;
+  I: integer;
   Dlg: TNodeEditForm;
 begin
   if NodesList.Selected = nil then Exit;
@@ -476,7 +602,7 @@ begin
     Dlg.Caption := _('node_title_edit');
     Dlg.SetData(EditedNode, ExistingHosts, SelIndex);
 
-    if Dlg.ShowModal = mrOK then
+    if Dlg.ShowModal = mrOk then
     begin
       // При провале валидации (пустой/дублирующийся хост) изменения не сохраняем
       if Dlg.ValidateInput then
@@ -493,11 +619,11 @@ end;
 
 procedure TSettingsForm.btnDeleteNodeClick(Sender: TObject);
 var
-  SelIndex: Integer;
-  I: Integer;
-  NodeId: Integer;
-  CanDelete: Boolean;
-  J: Integer;
+  SelIndex: integer;
+  I: integer;
+  NodeId: integer;
+  CanDelete: boolean;
+  J: integer;
 begin
   if NodesList.Selected = nil then Exit;
 
@@ -527,8 +653,9 @@ begin
     Exit;
   end;
 
-  if MessageDlg(_('title_confirm'), Format(_('confirm_delete_node'), [FConfig.Nodes[SelIndex].Name]),
-                mtConfirmation, [mbYes, mbNo], 0) = mrYes then
+  if MessageDlg(_('title_confirm'), Format(_('confirm_delete_node'),
+    [FConfig.Nodes[SelIndex].Name]), mtConfirmation,
+    [mbYes, mbNo], 0) = mrYes then
   begin
     // Remove node from array
     for I := SelIndex to High(FConfig.Nodes) - 1 do
@@ -542,7 +669,7 @@ end;
 
 procedure TSettingsForm.btnAddGroupClick(Sender: TObject);
 var
-  NewIndex: Integer;
+  NewIndex: integer;
   NewGroup: TNodeGroup;
   Dlg: TGroupEditForm;
 begin
@@ -552,7 +679,8 @@ begin
     Exit;
   end;
 
-  NewGroup := Default(TNodeGroup);  // запись содержит managed-поля — не FillChar
+  NewGroup := Default(TNodeGroup);
+  // запись содержит managed-поля — не FillChar
   NewGroup.Name := 'New Group';
   NewGroup.GroupType := gtSingle;
   SetLength(NewGroup.NodeIds, 1);
@@ -565,7 +693,7 @@ begin
     Dlg.Caption := _('group_title_add');
     Dlg.SetData(NewGroup, FConfig.Nodes);
 
-    if Dlg.ShowModal = mrOK then
+    if Dlg.ShowModal = mrOk then
     begin
       if Dlg.ValidateInput then
       begin
@@ -587,7 +715,7 @@ end;
 
 procedure TSettingsForm.btnEditGroupClick(Sender: TObject);
 var
-  SelIndex: Integer;
+  SelIndex: integer;
   EditedGroup: TNodeGroup;
   Dlg: TGroupEditForm;
 begin
@@ -604,7 +732,7 @@ begin
     Dlg.Caption := _('group_title_edit');
     Dlg.SetData(EditedGroup, FConfig.Nodes);
 
-    if Dlg.ShowModal = mrOK then
+    if Dlg.ShowModal = mrOk then
     begin
       if Dlg.ValidateInput then
       begin
@@ -620,16 +748,17 @@ end;
 
 procedure TSettingsForm.btnDeleteGroupClick(Sender: TObject);
 var
-  SelIndex: Integer;
-  I: Integer;
+  SelIndex: integer;
+  I: integer;
 begin
   if GroupsList.Selected = nil then Exit;
 
   SelIndex := GroupsList.Selected.Index;
   if (SelIndex < 0) or (SelIndex > High(FConfig.Groups)) then Exit;
 
-  if MessageDlg(_('title_confirm'), Format(_('confirm_delete_group'), [FConfig.Groups[SelIndex].Name]),
-                mtConfirmation, [mbYes, mbNo], 0) = mrYes then
+  if MessageDlg(_('title_confirm'), Format(_('confirm_delete_group'),
+    [FConfig.Groups[SelIndex].Name]), mtConfirmation,
+    [mbYes, mbNo], 0) = mrYes then
   begin
     for I := SelIndex to High(FConfig.Groups) - 1 do
       FConfig.Groups[I] := FConfig.Groups[I + 1];
@@ -643,7 +772,7 @@ end;
 procedure TSettingsForm.btnApplyClick(Sender: TObject);
 var
   ErrorMsg: string;
-  Idx: Integer;
+  Idx: integer;
   LangInfo: TLanguageInfo;
   LangCode: string;
 begin
@@ -682,7 +811,7 @@ begin
 
     SettingsDebugLog('Saving config');
     FConfigManager.SaveConfig;
-    
+
     if Assigned(FOnApply) then
     begin
       SettingsDebugLog('Calling OnApply handler');
@@ -690,7 +819,7 @@ begin
     end;
 
     FModified := False;
-    ModalResult := mrOK;
+    ModalResult := mrOk;
     SettingsDebugLog('Apply done');
   end;
 end;
@@ -722,7 +851,8 @@ begin
           RefreshNodesList;
           RefreshGroupsList;
           FModified := True;
-          MessageDlg(_('title_success'), _('msg_import_success'), mtInformation, [mbOK], 0);
+          MessageDlg(_('title_success'), _('msg_import_success'),
+            mtInformation, [mbOK], 0);
         end
         else
         begin
@@ -753,7 +883,8 @@ begin
       try
         ConfigMgr.SetConfig(FConfig);
         ConfigMgr.ExportConfig(SaveDlg.FileName);
-        MessageDlg(_('title_success'), _('msg_export_success'), mtInformation, [mbOK], 0);
+        MessageDlg(_('title_success'), _('msg_export_success'),
+          mtInformation, [mbOK], 0);
       finally
         ConfigMgr.Free;
       end;
@@ -765,7 +896,7 @@ end;
 
 procedure TSettingsForm.GroupsListItemChecked(Sender: TObject; Item: TListItem);
 var
-  Idx: Integer;
+  Idx: integer;
 begin
   if FLoading then Exit;
 
@@ -775,6 +906,11 @@ begin
     FConfig.Groups[Idx].Enabled := Item.Checked;
     FModified := True;
   end;
+end;
+
+procedure TSettingsForm.MacrosHintPanelClick(Sender: TObject);
+begin
+
 end;
 
 end.

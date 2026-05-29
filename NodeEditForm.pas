@@ -27,11 +27,12 @@ type
   private
     FNode: TNodeConfig;
     FExistingHosts: array of string;
-    FExcludeIndex: Integer;
+    FExcludeIndex: integer;
   public
-    procedure SetData(const Node: TNodeConfig; const ExistingHosts: array of string; ExcludeIndex: Integer);
+    procedure SetData(const Node: TNodeConfig; const ExistingHosts: array of string;
+      ExcludeIndex: integer);
     function GetData: TNodeConfig;
-    function ValidateInput: Boolean;
+    function ValidateInput: boolean;
     procedure ApplyLocalization;
   end;
 
@@ -54,9 +55,10 @@ begin
   btnCancel.Caption := _('btn_cancel');
 end;
 
-procedure TNodeEditForm.SetData(const Node: TNodeConfig; const ExistingHosts: array of string; ExcludeIndex: Integer);
+procedure TNodeEditForm.SetData(const Node: TNodeConfig;
+  const ExistingHosts: array of string; ExcludeIndex: integer);
 var
-  I: Integer;
+  I: integer;
 begin
   FNode := Node;
   FExcludeIndex := ExcludeIndex;
@@ -79,10 +81,10 @@ begin
   Result.TimeoutMs := StrToIntDef(edTimeout.Text, 2000);
 end;
 
-function TNodeEditForm.ValidateInput: Boolean;
+function TNodeEditForm.ValidateInput: boolean;
 var
   Host: string;
-  I: Integer;
+  I: integer;
 begin
   Result := False;
 

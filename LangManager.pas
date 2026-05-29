@@ -25,7 +25,8 @@ type
 
     procedure LoadLanguageFile(const FileName: string);
     procedure ScanLanguageFiles;
-    function ParseLanguageFile(const FileName: string; out LangCode, LangName: string): Boolean;
+    function ParseLanguageFile(const FileName: string;
+      out LangCode, LangName: string): boolean;
     procedure CreateDefaultLanguageFiles;
   public
     constructor Create;
@@ -47,13 +48,13 @@ type
     property CurrentLanguage: string read FCurrentLang;
 
     // Get available languages count
-    function GetLanguageCount: Integer;
+    function GetLanguageCount: integer;
 
     // Get language info by index
-    function GetLanguageInfo(Index: Integer): TLanguageInfo;
+    function GetLanguageInfo(Index: integer): TLanguageInfo;
 
     // Find language index by code
-    function FindLanguageIndex(const LangCode: string): Integer;
+    function FindLanguageIndex(const LangCode: string): integer;
   end;
 
 var
@@ -79,7 +80,7 @@ end;
 
 procedure TLangManager.Initialize(const LangPath: string);
 var
-  Idx: Integer;
+  Idx: integer;
 begin
   if LangPath <> '' then
     FLangDir := LangPath
@@ -190,6 +191,8 @@ begin
     Lines.Add('update_none=You have the latest version');
     Lines.Add('title_config_error=Configuration Error');
     Lines.Add('title_init_error=Initialization Error');
+    Lines.Add('update_balloon_title=New version available');
+    Lines.Add('update_balloon_text=Version %s is available on GitHub');
     Lines.SaveToFile(FileName);
   finally
     Lines.Free;
@@ -235,9 +238,11 @@ begin
     Lines.Add('selected_count=Выбрано: %d / %d');
     Lines.Add('error_host_empty=Хост не может быть пустым');
     Lines.Add('error_host_exists=Такой хост уже существует');
-    Lines.Add('error_node_in_group=Этот узел используется в группе. Сначала удалите его из всех групп.');
+    Lines.Add(
+      'error_node_in_group=Этот узел используется в группе. Сначала удалите его из всех групп.');
     Lines.Add('error_no_nodes=Сначала создайте хотя бы один узел.');
-    Lines.Add('error_group_single=Тип группы "Один" требует ровно 1 узел');
+    Lines.Add(
+      'error_group_single=Тип группы "Один" требует ровно 1 узел');
     Lines.Add('error_group_2x2=Тип группы "2x2" требует 2-4 узла');
     Lines.Add('error_group_3x3=Тип группы "3x3" требует 5-9 узлов');
     Lines.Add('confirm_delete_node=Удалить узел "%s"?');
@@ -247,8 +252,10 @@ begin
     Lines.Add('title_success=Успех');
     Lines.Add('title_cannot_delete=Невозможно удалить');
     Lines.Add('title_no_nodes=Нет узлов');
-    Lines.Add('msg_import_success=Конфигурация успешно импортирована.');
-    Lines.Add('msg_export_success=Конфигурация успешно экспортирована.');
+    Lines.Add(
+      'msg_import_success=Конфигурация успешно импортирована.');
+    Lines.Add(
+      'msg_export_success=Конфигурация успешно экспортирована.');
     Lines.Add('label_language=Язык:');
     Lines.Add('menu_settings=Настройки');
     Lines.Add('menu_exit=Выход');
@@ -256,9 +263,11 @@ begin
     Lines.Add('about_close=Закрыть');
     Lines.Add('tab_settings=Настройки');
     Lines.Add('label_command_on_change=Команда при смене статуса:');
-    Lines.Add('label_balloon_hint=Показывать всплывающие уведомления');
+    Lines.Add(
+      'label_balloon_hint=Показывать всплывающие уведомления');
     Lines.Add('label_run_on_ping_fail=Выполнить при потере пинга');
-    Lines.Add('label_run_on_ping_restore=Выполнить при восстановлении пинга');
+    Lines.Add(
+      'label_run_on_ping_restore=Выполнить при восстановлении пинга');
     Lines.Add('status_ok=OK');
     Lines.Add('status_fail=Сбой');
     Lines.Add('state_up=В сети');
@@ -268,6 +277,8 @@ begin
     Lines.Add('update_none=У вас последняя версия');
     Lines.Add('title_config_error=Ошибка конфигурации');
     Lines.Add('title_init_error=Ошибка инициализации');
+    Lines.Add('update_balloon_title=Доступна новая версия');
+    Lines.Add('update_balloon_text=На GitHub доступна версия %s');
     Lines.SaveToFile(FileName);
   finally
     Lines.Free;
@@ -313,7 +324,8 @@ begin
     Lines.Add('selected_count=Ausgewählt: %d / %d');
     Lines.Add('error_host_empty=Host darf nicht leer sein');
     Lines.Add('error_host_exists=Host existiert bereits');
-    Lines.Add('error_node_in_group=Dieser Knoten wird in einer Gruppe verwendet. Entfernen Sie ihn zuerst aus allen Gruppen.');
+    Lines.Add(
+      'error_node_in_group=Dieser Knoten wird in einer Gruppe verwendet. Entfernen Sie ihn zuerst aus allen Gruppen.');
     Lines.Add('error_no_nodes=Erstellen Sie zuerst mindestens einen Knoten.');
     Lines.Add('error_group_single=Einzelner Gruppentyp erfordert genau 1 Knoten');
     Lines.Add('error_group_2x2=2x2 Gruppentyp erfordert 2-4 Knoten');
@@ -391,7 +403,8 @@ begin
     Lines.Add('selected_count=Sélectionné: %d / %d');
     Lines.Add('error_host_empty=Lhôte ne peut pas être vide');
     Lines.Add('error_host_exists=Lhôte existe déjà');
-    Lines.Add('error_node_in_group=Ce nœud est utilisé dans un groupe. Supprimez-le dabord de tous les groupes.');
+    Lines.Add(
+      'error_node_in_group=Ce nœud est utilisé dans un groupe. Supprimez-le dabord de tous les groupes.');
     Lines.Add('error_no_nodes=Créez dabord au moins un nœud.');
     Lines.Add('error_group_single=Le type de groupe Simple nécessite exactement 1 nœud');
     Lines.Add('error_group_2x2=Le type de groupe 2x2 nécessite 2-4 nœuds');
@@ -469,9 +482,12 @@ begin
     Lines.Add('selected_count=Таңдалған: %d / %d');
     Lines.Add('error_host_empty=Хост бос болмауы керек');
     Lines.Add('error_host_exists=Бұндай хост бар');
-    Lines.Add('error_node_in_group=Бұл тұйын топта қолданылады. Оны барлық топтардан алдын ала алып тастаңыз.');
-    Lines.Add('error_no_nodes=Алдымен кем дегенде бір тұйын жасаңыз.');
-    Lines.Add('error_group_single=Жеке топ түрі тек 1 тұйынды қажет етеді');
+    Lines.Add(
+      'error_node_in_group=Бұл тұйын топта қолданылады. Оны барлық топтардан алдын ала алып тастаңыз.');
+    Lines.Add(
+      'error_no_nodes=Алдымен кем дегенде бір тұйын жасаңыз.');
+    Lines.Add(
+      'error_group_single=Жеке топ түрі тек 1 тұйынды қажет етеді');
     Lines.Add('error_group_2x2=2x2 топ түрі 2-4 тұйынды қажет етеді');
     Lines.Add('error_group_3x3=3x3 топ түрі 5-9 тұйынды қажет етеді');
     Lines.Add('confirm_delete_node="%s" тұйынын жою?');
@@ -498,7 +514,8 @@ begin
     Lines.Add('state_up=Желіде');
     Lines.Add('state_down=Желіде емес');
     Lines.Add('update_available=Жаңарту қолжетімді: %s');
-    Lines.Add('update_check_failed=Жаңартуды тексеру сәтсіз аяқталды');
+    Lines.Add(
+      'update_check_failed=Жаңартуды тексеру сәтсіз аяқталды');
     Lines.Add('update_none=Сізде соңғы нұсқа');
     Lines.Add('title_config_error=Конфигурация қатесі');
     Lines.Add('title_init_error=Инициализация қатесі');
@@ -512,7 +529,7 @@ procedure TLangManager.ScanLanguageFiles;
 var
   SearchRec: TSearchRec;
   LangCode, LangName: string;
-  Count: Integer;
+  Count: integer;
 begin
   SetLength(FAvailableLanguages, 0);
   Count := 0;
@@ -539,12 +556,13 @@ begin
   end;
 end;
 
-function TLangManager.ParseLanguageFile(const FileName: string; out LangCode, LangName: string): Boolean;
+function TLangManager.ParseLanguageFile(const FileName: string;
+  out LangCode, LangName: string): boolean;
 var
   Lines: TStringList;
-  i: Integer;
+  i: integer;
   Line: string;
-  PosEqual: Integer;
+  PosEqual: integer;
 begin
   Result := False;
   LangCode := '';
@@ -585,9 +603,9 @@ end;
 procedure TLangManager.LoadLanguageFile(const FileName: string);
 var
   Lines: TStringList;
-  i: Integer;
+  i: integer;
   Line: string;
-  PosEqual: Integer;
+  PosEqual: integer;
   Key, Value: string;
 begin
   FTranslations.Clear;
@@ -622,7 +640,7 @@ end;
 
 procedure TLangManager.SetLanguage(const LangCode: string);
 var
-  Idx: Integer;
+  Idx: integer;
 begin
   if FCurrentLang <> LangCode then
   begin
@@ -642,17 +660,18 @@ begin
     Result := Key; // Return key if translation not found
 end;
 
-function TLangManager.GetStringFmt(const Key: string; const Args: array of const): string;
+function TLangManager.GetStringFmt(const Key: string;
+  const Args: array of const): string;
 begin
   Result := Format(GetString(Key), Args);
 end;
 
-function TLangManager.GetLanguageCount: Integer;
+function TLangManager.GetLanguageCount: integer;
 begin
   Result := Length(FAvailableLanguages);
 end;
 
-function TLangManager.GetLanguageInfo(Index: Integer): TLanguageInfo;
+function TLangManager.GetLanguageInfo(Index: integer): TLanguageInfo;
 begin
   if (Index >= 0) and (Index < Length(FAvailableLanguages)) then
     Result := FAvailableLanguages[Index]
@@ -664,9 +683,9 @@ begin
   end;
 end;
 
-function TLangManager.FindLanguageIndex(const LangCode: string): Integer;
+function TLangManager.FindLanguageIndex(const LangCode: string): integer;
 var
-  i: Integer;
+  i: integer;
 begin
   Result := -1;
   for i := 0 to High(FAvailableLanguages) do

@@ -1,11 +1,11 @@
 object SettingsForm: TSettingsForm
   Left = 0
-  Height = 358
+  Height = 353
   Top = 0
   Width = 583
   BorderStyle = bsSingle
   Caption = 'Settings'
-  ClientHeight = 358
+  ClientHeight = 353
   ClientWidth = 583
   Constraints.MaxWidth = 583
   Constraints.MinWidth = 583
@@ -15,26 +15,26 @@ object SettingsForm: TSettingsForm
   OnShow = FormShow
   object PageControl: TPageControl
     Left = 4
-    Height = 312
+    Height = 307
     Top = 4
     Width = 575
-    ActivePage = NodesTab
+    ActivePage = TabSheet1
     Align = alClient
     BorderSpacing.Around = 4
-    TabIndex = 0
+    TabIndex = 2
     TabOrder = 0
     object NodesTab: TTabSheet
       Caption = 'Nodes'
-      ClientHeight = 284
+      ClientHeight = 279
       ClientWidth = 567
       object NodeMainPanel: TPanel
         Left = 0
-        Height = 284
+        Height = 279
         Top = 0
         Width = 567
         Align = alClient
         BevelOuter = bvNone
-        ClientHeight = 284
+        ClientHeight = 279
         ClientWidth = 567
         Color = 2105376
         Font.Color = 2829099
@@ -44,18 +44,18 @@ object SettingsForm: TSettingsForm
         TabOrder = 0
         object NodeListPanel: TPanel
           Left = 0
-          Height = 284
+          Height = 279
           Top = 0
           Width = 467
           Align = alClient
           BevelOuter = bvNone
-          ClientHeight = 284
+          ClientHeight = 279
           ClientWidth = 467
           ParentBackground = False
           TabOrder = 0
           object NodesList: TListView
             Left = 0
-            Height = 284
+            Height = 279
             Top = 0
             Width = 467
             Align = alClient
@@ -85,12 +85,12 @@ object SettingsForm: TSettingsForm
         end
         object NodeButtonsPanel: TPanel
           Left = 467
-          Height = 284
+          Height = 279
           Top = 0
           Width = 100
           Align = alRight
           BevelOuter = bvNone
-          ClientHeight = 284
+          ClientHeight = 279
           ClientWidth = 100
           Font.Color = 2829099
           ParentBackground = False
@@ -137,16 +137,16 @@ object SettingsForm: TSettingsForm
     end
     object GroupsTab: TTabSheet
       Caption = 'Groups'
-      ClientHeight = 284
+      ClientHeight = 279
       ClientWidth = 567
       object GroupMainPanel: TPanel
         Left = 0
-        Height = 284
+        Height = 279
         Top = 0
         Width = 567
         Align = alClient
         BevelOuter = bvNone
-        ClientHeight = 284
+        ClientHeight = 279
         ClientWidth = 567
         Font.Color = 2829099
         ParentBackground = False
@@ -154,18 +154,18 @@ object SettingsForm: TSettingsForm
         TabOrder = 0
         object GroupListPanel: TPanel
           Left = 0
-          Height = 284
+          Height = 279
           Top = 0
           Width = 467
           Align = alClient
           BevelOuter = bvNone
-          ClientHeight = 284
+          ClientHeight = 279
           ClientWidth = 467
           ParentBackground = False
           TabOrder = 0
           object GroupsList: TListView
             Left = 0
-            Height = 284
+            Height = 279
             Top = 0
             Width = 467
             Align = alClient
@@ -193,12 +193,12 @@ object SettingsForm: TSettingsForm
         end
         object GroupButtonsPanel: TPanel
           Left = 467
-          Height = 284
+          Height = 279
           Top = 0
           Width = 100
           Align = alRight
           BevelOuter = bvNone
-          ClientHeight = 284
+          ClientHeight = 279
           ClientWidth = 100
           ParentBackground = False
           TabOrder = 1
@@ -236,7 +236,7 @@ object SettingsForm: TSettingsForm
     end
     object TabSheet1: TTabSheet
       Caption = 'Параметры'
-      ClientHeight = 284
+      ClientHeight = 279
       ClientWidth = 567
       object cbSelectLanguage: TComboBox
         Left = 8
@@ -262,49 +262,43 @@ object SettingsForm: TSettingsForm
       object lCommandExec: TLabel
         Left = 221
         Height = 15
-        Top = 58
+        Top = 43
         Width = 314
         Caption = 'Команда при изменении доступности узла (глоабально):'
       end
       object eCommandExec: TEdit
         Left = 8
         Height = 23
-        Top = 74
+        Top = 59
         Width = 552
         Anchors = [akTop, akLeft, akRight]
         TabOrder = 1
-        TextHint = 'C:\\\\notify.cmd host=\\{host\\} status=\\{status\\} ping=\\{ping\\}'
-      end
-      object Memo1: TMemo
-        Left = 224
-        Height = 90
-        Top = 102
-        Width = 152
-        BorderStyle = bsNone
-        Lines.Strings = (
-          '{host}'#9'IP или FQDN'
-          '{name}'#9'Название узла'
-          '{status}'#9'up / down'
-          '{group}'#9'имя группы'
-          '{ping}'#9'время пинга'
-        )
-        ReadOnly = True
-        TabOrder = 2
+        Text = 's:\code\Lazarus\PingLed\reaction.cmd host={host} name={name} status={status} ping={ping} group={group}'
+        TextHint = 'C:\notify.cmd host={host} name={name} status={status} ping={ping} group={group}'
       end
       object cbBaloonHint: TCheckBox
         Left = 211
         Height = 19
-        Top = 25
+        Top = 8
         Width = 330
         Caption = 'Оповещать о смене статуса узла с помощью BaloonHint'
+        TabOrder = 2
+      end
+      object MacrosHintPanel: TPanel
+        Left = 0
+        Height = 194
+        Top = 85
+        Width = 567
+        Align = alBottom
         TabOrder = 3
+        OnClick = MacrosHintPanelClick
       end
     end
   end
   object SettingsFormButtonsPanel: TPanel
     Left = 0
     Height = 38
-    Top = 320
+    Top = 315
     Width = 583
     Align = alBottom
     ClientHeight = 38

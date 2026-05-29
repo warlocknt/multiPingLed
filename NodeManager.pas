@@ -8,7 +8,7 @@ uses
   Classes, SysUtils, ConfigManager, PingHelper;
 
 type
-  TIntArray = array of Integer;
+  TIntArray = array of integer;
   TNodeArray = array of TNodeConfig;
 
   TPingThread = class;
@@ -21,32 +21,33 @@ type
     FPingThreads: TFPList;
     FCriticalSection: TRTLCriticalSection;
     FOnStateChange: TNotifyEvent;
-    FModified: Boolean;  // Были ли изменения по сравнению с предыдущей конфигурацией
+    FModified: boolean;
+    // Были ли изменения по сравнению с предыдущей конфигурацией
     procedure DoStateChange;
-    function FindThreadIndexByNodeId(Id: Integer): Integer;
+    function FindThreadIndexByNodeId(Id: integer): integer;
   public
     procedure StopAllThreads;
     constructor Create;
     destructor Destroy; override;
-    procedure ApplyConfig(const Nodes: TNodeArray; ActiveIds:TIntArray);
+    procedure ApplyConfig(const Nodes: TNodeArray; ActiveIds: TIntArray);
     function GetNodes: TNodeArray;
-    function GetNodeById(Id: Integer): TNodeConfig;
-    function IdInArray(Id: Integer; const Arr: TIntArray): Boolean;
-    procedure StartThreadInternal(Index: Integer);
-    procedure UpdateNodeState(Id: Integer; NewState: TNodeState);
-    procedure UpdateNodePingTime(Id: Integer; PingTime: TDateTime; PingMs: Integer);
+    function GetNodeById(Id: integer): TNodeConfig;
+    function IdInArray(Id: integer; const Arr: TIntArray): boolean;
+    procedure StartThreadInternal(Index: integer);
+    procedure UpdateNodeState(Id: integer; NewState: TNodeState);
+    procedure UpdateNodePingTime(Id: integer; PingTime: TDateTime; PingMs: integer);
     procedure ExecuteNodeCommand(const Node: TNodeConfig; const GroupName: string);
     procedure MarkModified;
     property OnStateChange: TNotifyEvent read FOnStateChange write FOnStateChange;
   end;
-  
+
   TPingThread = class(TThread)
   private
     FNodeManager: TNodeManager;
-    FNodeId: Integer;
+    FNodeId: integer;
     FHost: string;
-    FIntervalMs: Integer;
-    FTimeoutMs: Integer;
+    FIntervalMs: integer;
+    FTimeoutMs: integer;
     procedure DoPing;
   protected
     procedure Execute; override;
@@ -69,7 +70,8 @@ begin
   FPingThreads := TFPList.Create;
   InitCriticalSection(FCriticalSection);
   SetLength(FNodes, 0);
-  FModified := True;  // При первом запуске - всегда изменения
+  FModified := True;
+  // При первом запуске - всегда изменения
 end;
 
 destructor TNodeManager.Destroy;
@@ -83,12 +85,12 @@ end;
 
 procedure TNodeManager.StopAllThreads;
 var
-  I: Integer;
+  I: integer;
   Thread: TPingThread;
   ThreadsCopy: array of TPingThread;
-  MaxTimeout, WaitBudget: Integer;
+  MaxTimeout, WaitBudget: integer;
   Deadline: QWord;
-  AllFinished: Boolean;
+  AllFinished: boolean;
 begin
   // Посылаем сигнал завершения всем потокам под блокировкой, одновременно
   // копируем указатели для ожидания без CS и сразу очищаем список.
@@ -104,7 +106,8 @@ begin
       if Thread.FTimeoutMs > MaxTimeout then
         MaxTimeout := Thread.FTimeoutMs;
     end;
-    FPingThreads.Clear;  // владение потоками теперь через ThreadsCopy
+    FPingThreads.Clear;
+    // владение потоками теперь через ThreadsCopy
   finally
     LeaveCriticalSection(FCriticalSection);
   end;
@@ -141,9 +144,9 @@ begin
   end;
 end;
 
-function TNodeManager.FindThreadIndexByNodeId(Id: Integer): Integer;
+function TNodeManager.FindThreadIndexByNodeId(Id: integer): integer;
 var
-  I: Integer;
+  I: integer;
   Thread: TPingThread;
 begin
   Result := -1;
@@ -162,16 +165,16 @@ end;
 
 procedure TNodeManager.ApplyConfig(const Nodes: TNodeArray; ActiveIds: TIntArray);
 var
-  I, J, ActiveCount: Integer;
+  I, J, ActiveCount: integer;
   OldNodes: TNodeArray;
-  ConfigChanged: Boolean;
-  ThreadIdx: Integer;
+  ConfigChanged: boolean;
+  ThreadIdx: integer;
   Thread: TPingThread;
   NewActiveIds: TIntArray;
   OldActiveIds: TIntArray;
-  IdStillActive: Boolean;
-  IdNewlyActive: Boolean;
-  NodeStillExists: Boolean;
+  IdStillActive: boolean;
+  IdNewlyActive: boolean;
+  NodeStillExists: boolean;
 begin
   // Собираем старые активные ID
   OldActiveIds := nil;
@@ -201,10 +204,9 @@ begin
     begin
       for I := 0 to High(Nodes) do
       begin
-        if (Nodes[I].Id <> OldNodes[I].Id) or
-           (Nodes[I].Host <> OldNodes[I].Host) or
-           (Nodes[I].IntervalMs <> OldNodes[I].IntervalMs) or
-           (Nodes[I].TimeoutMs <> OldNodes[I].TimeoutMs) then
+        if (Nodes[I].Id <> OldNodes[I].Id) or (Nodes[I].Host <>
+          OldNodes[I].Host) or (Nodes[I].IntervalMs <> OldNodes[I].IntervalMs) or
+          (Nodes[I].TimeoutMs <> OldNodes[I].TimeoutMs) then
         begin
           ConfigChanged := True;
           Break;
@@ -253,8 +255,10 @@ begin
         end;
       if not NodeStillExists then
       begin
-        NodeDebugLog('Stopping orphan thread for removed node ' + IntToStr(Thread.FNodeId));
-        Thread.FreeOnTerminate := True;  // освободит себя сам после завершения Execute
+        NodeDebugLog('Stopping orphan thread for removed node ' +
+          IntToStr(Thread.FNodeId));
+        Thread.FreeOnTerminate := True;
+        // освободит себя сам после завершения Execute
         Thread.Terminate;
         FPingThreads.Delete(I);
       end;
@@ -263,7 +267,8 @@ begin
     for I := 0 to High(FNodes) do
     begin
       IdStillActive := IdInArray(FNodes[I].Id, NewActiveIds);
-      IdNewlyActive := IdInArray(FNodes[I].Id, NewActiveIds) and not IdInArray(FNodes[I].Id, OldActiveIds);
+      IdNewlyActive := IdInArray(FNodes[I].Id, NewActiveIds) and not
+        IdInArray(FNodes[I].Id, OldActiveIds);
 
       ThreadIdx := FindThreadIndexByNodeId(FNodes[I].Id);
 
@@ -286,13 +291,15 @@ begin
         // Узел стал неактивным - останавливаем поток
         NodeDebugLog('Stopping thread for node ' + IntToStr(FNodes[I].Id));
         Thread := TPingThread(FPingThreads[ThreadIdx]);
-        Thread.FreeOnTerminate := True;  // освободит себя сам после завершения Execute
+        Thread.FreeOnTerminate := True;
+        // освободит себя сам после завершения Execute
         Thread.Terminate;
         FPingThreads.Delete(ThreadIdx);
       end;
     end;
 
-    NodeDebugLog('ApplyConfig completed, active threads: ' + IntToStr(FPingThreads.Count));
+    NodeDebugLog('ApplyConfig completed, active threads: ' +
+      IntToStr(FPingThreads.Count));
   finally
     LeaveCriticalSection(FCriticalSection);
   end;
@@ -310,9 +317,9 @@ begin
   end;
 end;
 
-function TNodeManager.GetNodeById(Id: Integer): TNodeConfig;
+function TNodeManager.GetNodeById(Id: integer): TNodeConfig;
 var
-  I: Integer;
+  I: integer;
 begin
   EnterCriticalSection(FCriticalSection);
   try
@@ -324,7 +331,8 @@ begin
         Exit;
       end;
     end;
-    Result := Default(TNodeConfig);  // запись содержит managed-поля — не FillChar
+    Result := Default(TNodeConfig);
+    // запись содержит managed-поля — не FillChar
   finally
     LeaveCriticalSection(FCriticalSection);
   end;
@@ -335,9 +343,9 @@ begin
   FModified := True;
 end;
 
-function TNodeManager.IdInArray(Id: Integer; const Arr: TIntArray): Boolean;
+function TNodeManager.IdInArray(Id: integer; const Arr: TIntArray): boolean;
 var
-  I: Integer;
+  I: integer;
 begin
   Result := False;
   for I := 0 to High(Arr) do
@@ -345,7 +353,7 @@ begin
       Exit(True);
 end;
 
-procedure TNodeManager.StartThreadInternal(Index: Integer);
+procedure TNodeManager.StartThreadInternal(Index: integer);
 var
   Thread: TPingThread;
 begin
@@ -357,10 +365,10 @@ begin
   FPingThreads.Add(Thread);
 end;
 
-procedure TNodeManager.UpdateNodeState(Id: Integer; NewState: TNodeState);
+procedure TNodeManager.UpdateNodeState(Id: integer; NewState: TNodeState);
 var
-  I: Integer;
-  StateChanged: Boolean;
+  I: integer;
+  StateChanged: boolean;
 begin
   StateChanged := False;
 
@@ -382,14 +390,15 @@ begin
   finally
     LeaveCriticalSection(FCriticalSection);
   end;
-  
+
   if StateChanged then
     DoStateChange;
 end;
 
-procedure TNodeManager.UpdateNodePingTime(Id: Integer; PingTime: TDateTime; PingMs: Integer);
+procedure TNodeManager.UpdateNodePingTime(Id: integer; PingTime: TDateTime;
+  PingMs: integer);
 var
-  I: Integer;
+  I: integer;
 begin
   EnterCriticalSection(FCriticalSection);
   try
@@ -407,12 +416,13 @@ begin
   end;
 end;
 
-procedure TNodeManager.ExecuteNodeCommand(const Node: TNodeConfig; const GroupName: string);
+procedure TNodeManager.ExecuteNodeCommand(const Node: TNodeConfig;
+  const GroupName: string);
 var
   FullCmd, Cmd, Params, Ext: string;
   Process: TProcess;
   StatusStr: string;
-  SpacePos, QuoteEnd: Integer;
+  SpacePos, QuoteEnd: integer;
 begin
   if Trim(Node.Command) = '' then Exit;
 
@@ -422,22 +432,24 @@ begin
   case Node.State of
     nsUp: StatusStr := 'up';
     nsDown: StatusStr := 'down';
-  else
-    StatusStr := 'unknown';
+    else
+      StatusStr := 'unknown';
   end;
 
   FullCmd := StringReplace(FullCmd, '{host}', Node.Host, [rfReplaceAll, rfIgnoreCase]);
   FullCmd := StringReplace(FullCmd, '{name}', Node.Name, [rfReplaceAll, rfIgnoreCase]);
   FullCmd := StringReplace(FullCmd, '{status}', StatusStr, [rfReplaceAll, rfIgnoreCase]);
   FullCmd := StringReplace(FullCmd, '{group}', GroupName, [rfReplaceAll, rfIgnoreCase]);
-  FullCmd := StringReplace(FullCmd, '{ping}', IntToStr(Node.LastPingMs), [rfReplaceAll, rfIgnoreCase]);
+  FullCmd := StringReplace(FullCmd, '{ping}', IntToStr(Node.LastPingMs),
+    [rfReplaceAll, rfIgnoreCase]);
 
   // Разделяем на исполняемый файл и параметры.
   // Если путь в кавычках ("C:\Program Files\app.exe" arg1) — берём его целиком
   // до закрывающей кавычки; иначе делим по первому пробелу.
   if (Length(FullCmd) > 0) and (FullCmd[1] = '"') then
   begin
-    QuoteEnd := Pos('"', FullCmd, 2);  // 3-арг System.Pos: поиск с позиции 2
+    QuoteEnd := Pos('"', FullCmd, 2);
+    // 3-арг System.Pos: поиск с позиции 2
     if QuoteEnd > 0 then
     begin
       Cmd := Copy(FullCmd, 2, QuoteEnd - 2);
@@ -467,7 +479,7 @@ begin
 
   // Определяем тип файла
   Ext := LowerCase(ExtractFileExt(Cmd));
-  
+
   Process := TProcess.Create(nil);
   try
     Process.Options := [poWaitOnExit];
@@ -538,7 +550,7 @@ end;
 
 procedure TPingThread.Execute;
 var
-  Slept: Integer;
+  Slept: integer;
 begin
   while not Terminated do
   begin

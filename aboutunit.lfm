@@ -44,6 +44,7 @@ object AboutForm: TAboutForm
   object LabelTgLNK: TLabel
     AnchorSideRight.Side = asrCenter
     AnchorSideBottom.Side = asrBottom
+    Cursor = crHandPoint
     Left = 98
     Height = 15
     Top = 202
@@ -75,6 +76,7 @@ object AboutForm: TAboutForm
   object LabelGitLNK: TLabel
     AnchorSideRight.Side = asrCenter
     AnchorSideBottom.Side = asrBottom
+    Cursor = crHandPoint
     Left = 86
     Height = 15
     Top = 186
@@ -92,7 +94,7 @@ object AboutForm: TAboutForm
   object LUpdateStatus: TLabel
     Left = 6
     Height = 16
-    Top = 213
+    Top = 217
     Width = 187
     Alignment = taCenter
     Anchors = [akLeft, akRight]
@@ -1635,6 +1637,5 @@ object AboutForm: TAboutForm
       5667E2B10000000049454E44AE426082
     }
     Proportional = True
-    OnClick = Image1Click
   end
 end

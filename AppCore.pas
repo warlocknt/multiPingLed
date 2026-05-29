@@ -13,7 +13,7 @@ type
   // Главный класс приложения (паттерн Singleton)
   // Управляет всеми компонентами и их взаимодействием
 
-  TIntArray = array of Integer;
+  TIntArray = array of integer;
 
   { TAppCore }
   TAppCore = class;  // Forward declaration
@@ -24,8 +24,8 @@ type
   private
     FLocalVersion: string;
     FLatestTag: string;
-    FSuccess: Boolean;
-    FUpdateAvailable: Boolean;
+    FSuccess: boolean;
+    FUpdateAvailable: boolean;
     FAppCore: TAppCore;
     procedure OnCheckDone;
   protected
@@ -36,16 +36,22 @@ type
 
   TAppCore = class
   private
-    class var FInstance: TAppCore;  // Статическая переменная для хранения единственного экземпляра
-    FConfigManager: TConfigManager;  // Менеджер конфигурации (загрузка/сохранение настроек)
-    FNodeManager: TNodeManager;      // Менеджер узлов (пингование хостов)
-    FGroupManager: TGroupManager;    // Менеджер групп (объединение узлов в визуальные группы)
-    FTrayController: TTrayController; // Контроллер иконок в системном трее
+  class var FInstance: TAppCore;
+    // Статическая переменная для хранения единственного экземпляра
+    FConfigManager: TConfigManager;
+    // Менеджер конфигурации (загрузка/сохранение настроек)
+    FNodeManager: TNodeManager;
+    // Менеджер узлов (пингование хостов)
+    FGroupManager: TGroupManager;
+    // Менеджер групп (объединение узлов в визуальные группы)
+    FTrayController: TTrayController;
+    // Контроллер иконок в системном трее
     FAboutForm: TAboutForm;
     FVersionCheckThread: TVersionCheckThread; // Поток проверки версии
-    FInitialized: Boolean;           // Флаг инициализации
-    FApplyingConfig: Boolean;        // Флаг: применяется конфигурация
-    
+    FInitialized: boolean;           // Флаг инициализации
+    FApplyingConfig: boolean;
+    // Флаг: применяется конфигурация
+
     // Инициализация конфигурации по умолчанию (если конфиг не существует)
     procedure InitializeConfig;
     // Применение конфигурации к менеджерам узлов и групп
@@ -61,14 +67,15 @@ type
     // Получение текущей версии приложения
     function GetAppVersion: string;
     function NormalizeVersion(const S: string): string;
-    function CompareVersions(const V1, V2: string): Integer;
+    function CompareVersions(const V1, V2: string): integer;
     function GetActiveNodeIds(const Groups: array of TNodeGroup): TIntArray;
-
   public
     LatestReleaseTag: string;
-    UpdateAvailable: Boolean;
-    UpdateCheckFailed: Boolean;   // Флаг: не удалось проверить версию (нет интернета)
-    UpdateCheckFinished: Boolean; // Флаг: проверка завершена (успешно или с ошибкой)
+    UpdateAvailable: boolean;
+    UpdateCheckFailed: boolean;
+    // Флаг: не удалось проверить версию (нет интернета)
+    UpdateCheckFinished: boolean;
+    // Флаг: проверка завершена (успешно или с ошибкой)
     constructor Create;
     destructor Destroy; override;
     // Основная инициализация приложения
@@ -86,7 +93,7 @@ implementation
 // Устанавливает таймауты WinHttp чтобы HTTP-запрос не висел 30+ секунд по
 // дефолту и поток корректно завершался при выходе приложения.
 function WinHttpSetTimeouts(hInternet: Pointer;
-  ResolveTimeout, ConnectTimeout, SendTimeout, ReceiveTimeout: Integer): LongBool;
+  ResolveTimeout, ConnectTimeout, SendTimeout, ReceiveTimeout: integer): longbool;
   stdcall; external 'winhttp.dll';
 
 procedure AppDebugLog(const Msg: string);
@@ -151,7 +158,7 @@ var
   ErrorMsg: string;
 begin
   AppDebugLog('Application started, PID=' + IntToStr(GetCurrentProcessId));
-  
+
   // Предотвращаем повторную инициализацию
   if FInitialized then Exit;
 
@@ -162,7 +169,7 @@ begin
     FNodeManager := TNodeManager.Create;
     FGroupManager := TGroupManager.Create;
     FTrayController := TTrayController.Create;
-    
+
     // Загружаем или создаем конфигурацию по умолчанию
     InitializeConfig;
 
@@ -174,7 +181,7 @@ begin
 
     // Асинхронная проверка версии (не блокирует запуск)
     StartVersionCheck;
-    
+
     // Проверяем валидность конфигурации
     if not FConfigManager.ValidateConfig(ErrorMsg) then
     begin
@@ -182,16 +189,16 @@ begin
       Application.Terminate;
       Exit;
     end;
-    
+
     // Применяем конфигурацию (запускаем пингование и отображение)
     ApplyConfig(Self);
-    
+
     // Настраиваем обработчики событий для трея
     FTrayController.OnShowSettings := @ShowSettings;
     FTrayController.OnExit := @ExitApp;
     FTrayController.OnAboutShow := @ShowAbout;
     FTrayController.Initialize;
-    
+
     FInitialized := True;
   except
     on E: Exception do
@@ -207,22 +214,22 @@ const
   // Количество узлов по умолчанию
   NodeCount = 14;
   // IP-адреса DNS-серверов для мониторинга
-  NodeHosts: array[0..NodeCount-1] of string = (
+  NodeHosts: array[0..NodeCount - 1] of string = (
     '1.1.1.1', '1.0.0.1', '8.8.8.8', '8.8.4.4',
     '9.9.9.9', '149.112.112.112', '208.67.222.222', '208.67.220.220',
     '64.6.64.6', '64.6.65.6', '4.2.2.2', '94.140.14.14',
     '185.228.168.9', '76.76.19.19'
-  );
+    );
   // Названия провайдеров DNS
-  NodeNames: array[0..NodeCount-1] of string = (
+  NodeNames: array[0..NodeCount - 1] of string = (
     'Cloudflare', 'Cloudflare', 'Google', 'Google',
     'Quad9', 'Quad9', 'OpenDNS', 'OpenDNS',
     'Verisign', 'Verisign', 'Lumen Technologies', 'AdGuard DNS',
     'CleanBrowsing', 'Control D'
-  );
+    );
 var
   Config: TAppConfig;
-  I: Integer;
+  I: integer;
 begin
   // Если конфиг уже существует - просто загружаем его
   if FConfigManager.ConfigExists then
@@ -243,7 +250,8 @@ begin
     Config.Nodes[I].Host := NodeHosts[I];
     Config.Nodes[I].IntervalMs := 5000;  // Интервал пинга 5 секунд
     Config.Nodes[I].TimeoutMs := 2000;   // Таймаут 2 секунды
-    Config.Nodes[I].State := nsUnknown;  // Начальное состояние - неизвестно
+    Config.Nodes[I].State := nsUnknown;
+    // Начальное состояние - неизвестно
     Config.Nodes[I].LastPingTime := 0;   // Время еще не установлено
   end;
 
@@ -291,9 +299,9 @@ end;
 procedure TAppCore.ApplyConfig(Sender: TObject);
 var
   Config: TAppConfig;
-  Count, I: Integer;
+  Count, I: integer;
   EnabledGroups: array of TNodeGroup;
-  ActiveNodeIds : TIntArray;
+  ActiveNodeIds: TIntArray;
 begin
   FApplyingConfig := True;
   try
@@ -303,15 +311,16 @@ begin
       FTrayController.SetSettingsEnabled(False);
       Application.ProcessMessages;  // Даём UI обновиться
     end;
-    
+
     AppDebugLog('ApplyConfig called');
     Config := FConfigManager.GetConfig;
 
     // Переприменяем настройку balloon hint (могла измениться в настройках)
     if FTrayController <> nil then
       FTrayController.BalloonHintEnabled := FConfigManager.GetBalloonHintEnabled;
-    AppDebugLog('Config has ' + IntToStr(Length(Config.Groups)) + ' groups, ' + IntToStr(Length(Config.Nodes)) + ' nodes');
-    
+    AppDebugLog('Config has ' + IntToStr(Length(Config.Groups)) +
+      ' groups, ' + IntToStr(Length(Config.Nodes)) + ' nodes');
+
     ActiveNodeIds := GetActiveNodeIds(Config.Groups);
     AppDebugLog('ActiveNodeIds count: ' + IntToStr(Length(ActiveNodeIds)));
 
@@ -337,7 +346,7 @@ begin
     // Передаём GroupManager только включённые группы
     FGroupManager.ApplyConfig(EnabledGroups, FNodeManager);
     AppDebugLog('GroupManager.ApplyConfig called');
-    
+
     // Инкрементальное обновление иконок (только новые/удалённые)
     FTrayController.SyncGroups(FGroupManager, FNodeManager);
     AppDebugLog('TrayController.SyncGroups called from ApplyConfig');
@@ -387,25 +396,27 @@ begin
   FAboutForm.AppVersion := FConfigManager.GetVersion;
   FAboutForm.ApplyLocalization;
   if TAppCore.Instance.UpdateCheckFinished then
-    begin
+  begin
     if TAppCore.Instance.UpdateAvailable then
-      begin
-      FAboutForm.LUpdateStatus.Caption := LangMgr.GetStringFmt('update_available', [TAppCore.Instance.LatestReleaseTag]);
-      FAboutForm.SetUpdateStatus (updAvailable);
-      end
+    begin
+      FAboutForm.LUpdateStatus.Caption :=
+        LangMgr.GetStringFmt('update_available', [TAppCore.Instance.LatestReleaseTag]);
+      FAboutForm.SetUpdateStatus(updAvailable);
+      if FTrayController <> nil then
+        FTrayController.ShowUpdateBalloon(TAppCore.Instance.LatestReleaseTag);
+    end
     else
-      if TAppCore.Instance.UpdateCheckFailed then
-         begin
-         FAboutForm.LUpdateStatus.Caption := _('update_check_failed');
-         FAboutForm.SetUpdateStatus (updCheckFailed);
-         end
-      else
-         begin
-         FAboutForm.LUpdateStatus.Caption := _('update_none');
-         FAboutForm.SetUpdateStatus (updNone);
-         end;
+    if TAppCore.Instance.UpdateCheckFailed then
+    begin
+      FAboutForm.LUpdateStatus.Caption := _('update_check_failed');
+      FAboutForm.SetUpdateStatus(updCheckFailed);
+    end
+    else
+    begin
+      FAboutForm.LUpdateStatus.Caption := _('update_none');
+      FAboutForm.SetUpdateStatus(updNone);
     end;
-
+  end;
   FAboutForm.ShowModal;
 end;
 
@@ -448,11 +459,11 @@ procedure TVersionCheckThread.Execute;
 var
   hSession, hConnect, hRequest: HINTERNET;
   DataAvailable, BytesRead: DWORD;
-  Buffer: array[0..1023] of Byte;
+  Buffer: array[0..1023] of byte;
   Response: TStringStream;
   JSON, TagNode: TJSONData;
   RawData: string;
-  URLPathW: WideString;
+  URLPathW: widestring;
   RawTag: string;
 begin
   hSession := nil;
@@ -468,9 +479,8 @@ begin
     try
       if Terminated then Exit;
 
-      hSession := WinHttpOpen(PWideChar('multiPingLed/' + FLocalVersion),
-        WINHTTP_ACCESS_TYPE_DEFAULT_PROXY,
-        WINHTTP_NO_PROXY_NAME,
+      hSession := WinHttpOpen(pwidechar('multiPingLed/' + FLocalVersion),
+        WINHTTP_ACCESS_TYPE_DEFAULT_PROXY, WINHTTP_NO_PROXY_NAME,
         WINHTTP_NO_PROXY_BYPASS, 0);
       if (hSession = nil) or Terminated then Exit;
       // 5 секунд на каждый этап — иначе WaitFor при выходе заблокирует надолго
@@ -480,7 +490,7 @@ begin
         INTERNET_DEFAULT_HTTPS_PORT, 0);
       if (hConnect = nil) or Terminated then Exit;
 
-      hRequest := WinHttpOpenRequest(hConnect, 'GET', PWideChar(URLPathW),
+      hRequest := WinHttpOpenRequest(hConnect, 'GET', pwidechar(URLPathW),
         nil, WINHTTP_NO_REFERER, WINHTTP_DEFAULT_ACCEPT_TYPES, WINHTTP_FLAG_SECURE);
       if (hRequest = nil) or Terminated then Exit;
 
@@ -536,7 +546,8 @@ begin
       Delete(FLatestTag, 1, 1);
 
     // Убираем суффиксы (-beta, -rc, -pre и т.д.)
-    while (Length(FLatestTag) > 0) and (FLatestTag[Length(FLatestTag)] in ['a'..'z', 'A'..'Z', '-', '_', '.']) do
+    while (Length(FLatestTag) > 0) and (FLatestTag[Length(FLatestTag)] in
+        ['a'..'z', 'A'..'Z', '-', '_', '.']) do
     begin
       // Ищем последний дефис или точку перед цифрами
       if Pos('-', FLatestTag) > 0 then
@@ -568,7 +579,10 @@ begin
   begin
     FAppCore.LatestReleaseTag := FLatestTag;
     FAppCore.UpdateAvailable := FUpdateAvailable;
-    AppDebugLog('Version check: local=' + FLocalVersion + ', latest=' + FLatestTag + ', update=' + BoolToStr(FUpdateAvailable, True));
+    AppDebugLog('Version check: local=' + FLocalVersion + ', latest=' +
+      FLatestTag + ', update=' + BoolToStr(FUpdateAvailable, True));
+    if FUpdateAvailable and (FAppCore.FTrayController <> nil) then
+      FAppCore.FTrayController.ShowUpdateBalloon(FLatestTag);
   end;
   FAppCore.UpdateCheckFinished := True;
 end;
@@ -577,18 +591,19 @@ end;
 
 function TAppCore.GetAppVersion: string;
 var
-  inf : TVersionInfo;
+  inf: TVersionInfo;
 begin
   inf := TVersionInfo.Create;
   inf.Load(HINSTANCE);
   with inf.FixedInfo do
-    Result := Format('%d.%d.%d.%d', [FileVersion[0], FileVersion[1], FileVersion[2], FileVersion[3]]);
+    Result := Format('%d.%d.%d.%d', [FileVersion[0], FileVersion[1],
+      FileVersion[2], FileVersion[3]]);
   inf.Free;
 end;
 
 function TAppCore.NormalizeVersion(const S: string): string;
 var
-  DashPos: Integer;
+  DashPos: integer;
 begin
   Result := Trim(S);
   // Убираем префикс 'v' или 'V'
@@ -600,48 +615,47 @@ begin
     Result := Trim(Copy(Result, 1, DashPos - 1));
 end;
 
-function TAppCore.CompareVersions(const V1, V2: string): Integer;
+function TAppCore.CompareVersions(const V1, V2: string): integer;
 var
   Parts1, Parts2: TStringArray;
-  I, N1, N2, MaxLen: Integer;
+  I, N1, N2, MaxLen: integer;
   S1, S2: string;
 begin
   S1 := NormalizeVersion(V1);
-    S2 := NormalizeVersion(V2);
+  S2 := NormalizeVersion(V2);
 
-    Parts1 := S1.Split('.');
-    Parts2 := S2.Split('.');
+  Parts1 := S1.Split('.');
+  Parts2 := S2.Split('.');
 
-    MaxLen := Length(Parts1);
-    if Length(Parts2) > MaxLen then
-      MaxLen := Length(Parts2);
+  MaxLen := Length(Parts1);
+  if Length(Parts2) > MaxLen then
+    MaxLen := Length(Parts2);
 
-    for I := 0 to MaxLen - 1 do
-    begin
-      if I < Length(Parts1) then
-        N1 := StrToIntDef(Parts1[I], 0)
-      else
-        N1 := 0;
+  for I := 0 to MaxLen - 1 do
+  begin
+    if I < Length(Parts1) then
+      N1 := StrToIntDef(Parts1[I], 0)
+    else
+      N1 := 0;
 
-      if I < Length(Parts2) then
-        N2 := StrToIntDef(Parts2[I], 0)
-      else
-        N2 := 0;
+    if I < Length(Parts2) then
+      N2 := StrToIntDef(Parts2[I], 0)
+    else
+      N2 := 0;
 
-      if N1 > N2 then Exit(1);
-      if N1 < N2 then Exit(-1);
-    end;
+    if N1 > N2 then Exit(1);
+    if N1 < N2 then Exit(-1);
+  end;
 
-    Result := 0;
+  Result := 0;
 end;
 
-function TAppCore.GetActiveNodeIds(const Groups: array of TNodeGroup
-  ): TIntArray;
+function TAppCore.GetActiveNodeIds(const Groups: array of TNodeGroup): TIntArray;
 var
-  I, J, Count: Integer;
-  Tmp: array of Integer;
-  Exists: Boolean;
-  K: Integer;
+  I, J, Count: integer;
+  Tmp: array of integer;
+  Exists: boolean;
+  K: integer;
 begin
   Tmp := nil;
   SetLength(Tmp, 0);

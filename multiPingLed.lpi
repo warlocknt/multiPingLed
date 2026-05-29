@@ -21,8 +21,8 @@
       <AutoIncrementBuild Value="True"/>
       <MajorVersionNr Value="1"/>
       <MinorVersionNr Value="1"/>
-      <RevisionNr Value="5"/>
-      <BuildNr Value="748"/>
+      <RevisionNr Value="6"/>
+      <BuildNr Value="755"/>
       <Language Value="0419"/>
       <Attributes pvaPatched="True"/>
       <StringTable Comments="multiPingLed - lightweight Windows tray utility for monitoring multiple hosts via ICMP (ping) with LED-style status indicators" FileDescription="multiPingLed" InternalName="multiPingLed" OriginalFilename="multiPingLed.exe" ProductName="multiPingLed" ProductVersion="1.1"/>
@@ -135,6 +135,11 @@
         <HasResources Value="True"/>
         <ResourceBaseClass Value="Form"/>
         <UnitName Value="AboutUnit"/>
+      </Unit>
+      <Unit>
+        <Filename Value="appconstants.pas"/>
+        <IsPartOfProject Value="True"/>
+        <UnitName Value="AppConstants"/>
       </Unit>
     </Units>
   </ProjectOptions>

@@ -9,30 +9,32 @@ uses
 
 type
   TGroupInfo = record
-    Id: Integer;
+    Id: integer;
     Name: string;
     GroupType: ConfigManager.TGroupType;
-    NodeIds: array of Integer;
+    NodeIds: array of integer;
     NodeStates: array of ConfigManager.TNodeState;
   end;
-  
+
   TGroupArray = array of TGroupInfo;
-  
+
   TGroupManager = class
   private
     FGroups: TGroupArray;
     FNodeManager: TNodeManager;
     FCriticalSection: TRTLCriticalSection;
-    FLastExecutedStates: array of array of ConfigManager.TNodeState;  // Для отслеживания выполненных команд
-    FStatesInitialized: Boolean;  // Состояния посеяны после ApplyConfig (до этого изменения не считаем)
+    FLastExecutedStates: array of array of ConfigManager.TNodeState;
+    // Для отслеживания выполненных команд
+    FStatesInitialized: boolean;
+    // Состояния посеяны после ApplyConfig (до этого изменения не считаем)
     procedure OnNodeStateChange(Sender: TObject);
-    procedure UpdateGroupStates(RunCommands: Boolean = True);
+    procedure UpdateGroupStates(RunCommands: boolean = True);
   public
     constructor Create;
     destructor Destroy; override;
     procedure ApplyConfig(const Groups: array of TNodeGroup; NodeManager: TNodeManager);
     function GetGroups: TGroupArray;
-    function GetGroupById(Id: Integer): TGroupInfo;
+    function GetGroupById(Id: integer): TGroupInfo;
   end;
 
 implementation
@@ -60,11 +62,12 @@ begin
   inherited Destroy;
 end;
 
-procedure TGroupManager.ApplyConfig(const Groups: array of TNodeGroup; NodeManager: TNodeManager);
+procedure TGroupManager.ApplyConfig(const Groups: array of TNodeGroup;
+  NodeManager: TNodeManager);
 var
-  I, J: Integer;
-  GroupCount: Integer;
-  ArraySize: Integer;
+  I, J: integer;
+  GroupCount: integer;
+  ArraySize: integer;
 begin
   EnterCriticalSection(FCriticalSection);
   try
@@ -91,8 +94,8 @@ begin
           gtSingle: ArraySize := 1;
           gt2x2: ArraySize := 4;
           gt3x3: ArraySize := 9;
-        else
-          ArraySize := 9;
+          else
+            ArraySize := 9;
         end;
       end;
 
@@ -134,20 +137,20 @@ begin
   UpdateGroupStates(True);
 end;
 
-procedure TGroupManager.UpdateGroupStates(RunCommands: Boolean);
+procedure TGroupManager.UpdateGroupStates(RunCommands: boolean);
 type
   TCommandEntry = record
-    NodeId: Integer;
+    NodeId: integer;
     GroupName: string;
   end;
 var
-  I, J: Integer;
+  I, J: integer;
   NodeInfo: TNodeConfig;
-  ArraySize: Integer;
+  ArraySize: integer;
   Commands: array of TCommandEntry;
-  CmdCount: Integer;
+  CmdCount: integer;
   OldState, NewState: ConfigManager.TNodeState;
-  CanCompare: Boolean;
+  CanCompare: boolean;
 begin
   if FNodeManager = nil then Exit;
 
@@ -181,11 +184,12 @@ begin
         // Команду запускаем только при реальном переходе между up/down.
         // Пропускаем первичную инициализацию и переходы в/из nsUnknown.
         if CanCompare and (FGroups[I].NodeIds[J] > 0) and
-           (I < Length(FLastExecutedStates)) and (J < Length(FLastExecutedStates[I])) then
+          (I < Length(FLastExecutedStates)) and
+          (J < Length(FLastExecutedStates[I])) then
         begin
           OldState := FLastExecutedStates[I][J];
-          if (NewState <> OldState) and
-             (NewState <> nsUnknown) and (OldState <> nsUnknown) then
+          if (NewState <> OldState) and (NewState <> nsUnknown) and
+            (OldState <> nsUnknown) then
           begin
             SetLength(Commands, CmdCount + 1);
             Commands[CmdCount].NodeId := FGroups[I].NodeIds[J];
@@ -217,7 +221,8 @@ begin
     NodeInfo := FNodeManager.GetNodeById(Commands[I].NodeId);
     if NodeInfo.Id = 0 then Continue;
     if Trim(NodeInfo.Command) = '' then Continue;
-    GroupDebugLog('Executing command for node ' + IntToStr(NodeInfo.Id) + ' (' + NodeInfo.Name + ') state changed');
+    GroupDebugLog('Executing command for node ' + IntToStr(NodeInfo.Id) +
+      ' (' + NodeInfo.Name + ') state changed');
     FNodeManager.ExecuteNodeCommand(NodeInfo, Commands[I].GroupName);
   end;
 end;
@@ -232,9 +237,9 @@ begin
   end;
 end;
 
-function TGroupManager.GetGroupById(Id: Integer): TGroupInfo;
+function TGroupManager.GetGroupById(Id: integer): TGroupInfo;
 var
-  I: Integer;
+  I: integer;
 begin
   EnterCriticalSection(FCriticalSection);
   try
@@ -246,7 +251,8 @@ begin
         Exit;
       end;
     end;
-    Result := Default(TGroupInfo);  // запись содержит managed-поля — не FillChar
+    Result := Default(TGroupInfo);
+    // запись содержит managed-поля — не FillChar
   finally
     LeaveCriticalSection(FCriticalSection);
   end;

@@ -6,8 +6,8 @@ interface
 
 uses
   Classes, SysUtils, Graphics, Forms, Menus, ExtCtrls, Controls, Windows,
-  LCLIntf, LCLType,
-  ConfigManager, GroupManager, NodeManager, LangManager, AboutUnit, IconRenderer;
+  LCLIntf, LCLType, ShellApi, ConfigManager, GroupManager, NodeManager,
+  LangManager, AboutUnit, IconRenderer, AppConstants;
 
 type
   // Класс для управления иконками в системном трее
@@ -17,23 +17,28 @@ type
 
   TTrayController = class
   private
-    FPopupMenu: TPopupMenu;           // Контекстное меню для иконок
+    FPopupMenu: TPopupMenu;
+    // Контекстное меню для иконок
     FGroupIcons: array of TTrayIcon;  // Массив иконок групп
     FGroupManager: TGroupManager;     // Ссылка на менеджер групп
     FNodeManager: TNodeManager;       // Ссылка на менеджер узлов
-    FOnShowSettings: TNotifyEvent;    // Обработчик открытия настроек
+    FOnShowSettings: TNotifyEvent;
+    // Обработчик открытия настроек
     FOnExit: TNotifyEvent;            // Обработчик выхода
     FAboutShow: TNotifyEvent;        // Обработчик "О программе"
-    FTimer: TTimer;                   // Таймер для обновления иконок
-    FSettingsShowing: Boolean;         // Флаг: форма настроек показывается
-    FBalloonHintEnabled: Boolean;      // Показывать balloon hint при смене статуса
+    FTimer: TTimer;
+    // Таймер для обновления иконок
+    FSettingsShowing: boolean;
+    // Флаг: форма настроек показывается
+    FBalloonHintEnabled: boolean;
+    // Показывать balloon hint при смене статуса
     // Сохраненные состояния узлов для определения изменений
     FLastGroupStates: array of array of ConfigManager.TNodeState;
 
     // Создание контекстного меню (Settings, Exit)
     procedure CreatePopupMenu;
     // Создание иконки-заглушки (зеленый круг)
-    function CreateGreenDotIcon(Size: Integer): TIcon;
+    function CreateGreenDotIcon(Size: integer): TIcon;
     // Обработчик клика по "Settings"
     procedure OnSettingsClick(Sender: TObject);
     // Отложенный вызов ShowSettings
@@ -47,15 +52,17 @@ type
     // Обновление всех иконок групп
     procedure UpdateTrayIcons;
     // Проверка изменения состояний узлов
-    function GroupStatesChanged: Boolean;
+    function GroupStatesChanged: boolean;
     // Формирование подсказки для группы
     function BuildGroupHint(const Group: TGroupInfo): string;
     // Поиск иконки по ID группы
-    function FindIconIndexByGroupId(Id: Integer): Integer;
+    function FindIconIndexByGroupId(Id: integer): integer;
     // Создание одной иконки для группы
-    procedure CreateIconForGroup(const Group: TGroupInfo; var OutIdx: Integer);
+    procedure CreateIconForGroup(const Group: TGroupInfo; var OutIdx: integer);
     // Показать balloon hint об изменении статуса узла
-    procedure ShowStatusBalloon(IconIdx, NodeId: Integer; NewState: ConfigManager.TNodeState);
+    procedure ShowStatusBalloon(IconIdx, NodeId: integer;
+      NewState: ConfigManager.TNodeState);
+    procedure OnUpdateBalloonClick(Sender: TObject);
   public
     constructor Create;
     destructor Destroy; override;
@@ -66,11 +73,14 @@ type
     // Инкрементальное обновление - только новые/удалённые группы
     procedure SyncGroups(GroupManager: TGroupManager; NodeManager: TNodeManager);
     procedure UpdateMenuLocalization;
-    procedure SetSettingsEnabled(Enabled: Boolean);
+    procedure SetSettingsEnabled(Enabled: boolean);
     property OnShowSettings: TNotifyEvent read FOnShowSettings write FOnShowSettings;
     property OnAboutShow: TNotifyEvent read FAboutShow write FAboutShow;
     property OnExit: TNotifyEvent read FOnExit write FOnExit;
-    property BalloonHintEnabled: Boolean read FBalloonHintEnabled write FBalloonHintEnabled;
+    property BalloonHintEnabled: boolean read FBalloonHintEnabled
+      write FBalloonHintEnabled;
+    // Показать balloon при обнаружении новой версии на GitHub
+    procedure ShowUpdateBalloon(const NewVersion: string);
   end;
 
 implementation
@@ -104,7 +114,7 @@ end;
 
 destructor TTrayController.Destroy;
 var
-  I: Integer;
+  I: integer;
 begin
   // Останавливаем таймер
   if FTimer <> nil then
@@ -125,7 +135,7 @@ begin
 
   // Освобождаем меню
   FreeAndNil(FPopupMenu);
-  
+
   inherited Destroy;
 end;
 
@@ -165,12 +175,12 @@ begin
   FPopupMenu.Items.Add(MenuItem);
 end;
 
-function TTrayController.CreateGreenDotIcon(Size: Integer): TIcon;
+function TTrayController.CreateGreenDotIcon(Size: integer): TIcon;
 var
   FakeGroup: TGroupInfo;
 begin
   Result := nil;
-  
+
   // Создаем фиктивную группу с одним узлом в состоянии nsUp
   FakeGroup.Id := 0;
   FakeGroup.Name := '';
@@ -179,7 +189,7 @@ begin
   FakeGroup.NodeIds[0] := 0;
   SetLength(FakeGroup.NodeStates, 1);
   FakeGroup.NodeStates[0] := ConfigManager.nsUp;
-  
+
   // Используем IconRenderer для создания иконки
   Result := TIconRenderer.RenderGroupIcon(FakeGroup);
 end;
@@ -192,7 +202,7 @@ end;
 
 function TTrayController.BuildGroupHint(const Group: TGroupInfo): string;
 
-  function GetNodeName(NodeId: Integer): string;
+  function GetNodeName(NodeId: integer): string;
   var
     Node: TNodeConfig;
   begin
@@ -205,7 +215,7 @@ function TTrayController.BuildGroupHint(const Group: TGroupInfo): string;
     Result := '"' + Node.Name + '"';
   end;
 
-  function FormatNodeFull(NodeId: Integer): string;
+  function FormatNodeFull(NodeId: integer): string;
   var
     Node: TNodeConfig;
     StatusSymbol: string;
@@ -214,36 +224,37 @@ function TTrayController.BuildGroupHint(const Group: TGroupInfo): string;
   begin
     Result := '';
     if NodeId = 0 then Exit;
-    
+
     Node := FNodeManager.GetNodeById(NodeId);
     if Node.Id = 0 then Exit;
-    
+
     // Выбираем символ статуса
     case Node.State of
       nsUp: StatusSymbol := '+';
       nsDown: StatusSymbol := 'X';
-      else StatusSymbol := '?';
+      else
+        StatusSymbol := '?';
     end;
-    
+
     // Форматируем время
     if Node.LastPingTime > 0 then
       TimeStr := FormatDateTime('hh:nn', Node.LastPingTime)
     else
       TimeStr := '--:--';
-    
+
     // Определяем текст статуса
     case Node.State of
       nsUp: StatusText := _('status_ok');
       nsDown: StatusText := _('status_fail');
-    else
-      StatusText := '?';
+      else
+        StatusText := '?';
     end;
-    
+
     Result := Format('%s %s - %s %s', [StatusSymbol, Node.Name, StatusText, TimeStr]);
   end;
 
 var
-  I: Integer;
+  I: integer;
   GroupName: string;
   FirstNodeName: string;
   LeftName, RightName: string;
@@ -252,12 +263,12 @@ begin
   if FNodeManager = nil then Exit;
 
   GroupName := Group.Name;
-  
+
   // Для группы 3x3 используем сверхкомпактный формат - только имена
   if Group.GroupType = gt3x3 then
   begin
     Result := GroupName;
-    
+
     // Выводим все узлы группы
     for I := 0 to High(Group.NodeIds) do
     begin
@@ -276,14 +287,14 @@ begin
           RightName := GetNodeName(Group.NodeIds[I + 1])
         else
           RightName := '';
-        
+
         if (LeftName <> '') or (RightName <> '') then
         begin
           Result := Result + #13#10;
-          
+
           if LeftName <> '' then
             Result := Result + LeftName;
-          
+
           if RightName <> '' then
           begin
             if LeftName <> '' then
@@ -299,29 +310,30 @@ begin
   begin
     // Для Single и 2x2 используем полный формат
     Result := GroupName + #13#10;
-    
-    for I := 0 to Length(Group.NodeIds)-1 do
+
+    for I := 0 to Length(Group.NodeIds) - 1 do
     begin
       if Group.NodeIds[I] = 0 then Continue;
-      
+
       Result := Result + FormatNodeFull(Group.NodeIds[I]) + #13#10;
     end;
-    
+
     // Удаляем последний перевод строки
     if Length(Result) > 2 then
       SetLength(Result, Length(Result) - 2);
   end;
 end;
 
-procedure TTrayController.Rebuild(GroupManager: TGroupManager; NodeManager: TNodeManager);
+procedure TTrayController.Rebuild(GroupManager: TGroupManager;
+  NodeManager: TNodeManager);
 var
-  I: Integer;
+  I: integer;
   Groups: TGroupArray;
   NewIcon: TTrayIcon;
   TempIcon: TIcon;
 begin
-DebugLog('Rebuild called');
-FGroupManager := GroupManager;
+  DebugLog('Rebuild called');
+  FGroupManager := GroupManager;
   FNodeManager := NodeManager;
 
   // Уничтожаем старые иконки групп
@@ -337,29 +349,29 @@ FGroupManager := GroupManager;
   SetLength(FGroupIcons, 0);
 
   // Если менеджер групп не задан - выходим
-  if FGroupManager = nil then 
+  if FGroupManager = nil then
   begin
-DebugLog('FGroupManager is nil, exiting');
-Exit;
+    DebugLog('FGroupManager is nil, exiting');
+    Exit;
   end;
 
   // Получаем массив групп
   Groups := FGroupManager.GetGroups;
-DebugLog('Got ' + IntToStr(Length(Groups)) + ' groups');
-// Если нет групп - создаем заглушку-иконку
+  DebugLog('Got ' + IntToStr(Length(Groups)) + ' groups');
+  // Если нет групп - создаем заглушку-иконку
   if Length(Groups) = 0 then
   begin
-DebugLog('No groups found, creating placeholder icon');
-SetLength(FGroupIcons, 1);
+    DebugLog('No groups found, creating placeholder icon');
+    SetLength(FGroupIcons, 1);
     SetLength(FLastGroupStates, 1);
     SetLength(FLastGroupStates[0], 0);
-    
+
     NewIcon := TTrayIcon.Create(nil);
     try
       NewIcon.Hint := 'multiPingLed';
       NewIcon.PopUpMenu := FPopupMenu;
       NewIcon.OnDblClick := @OnSettingsClick;
-      
+
       // Создаем зеленую иконку (как один узел в состоянии Up)
       TempIcon := CreateGreenDotIcon(16);
       try
@@ -370,19 +382,19 @@ SetLength(FGroupIcons, 1);
       finally
         TempIcon.Free;
       end;
-      
+
       FGroupIcons[0] := NewIcon;
       NewIcon.Show;
-DebugLog('Placeholder icon shown');
-except
+      DebugLog('Placeholder icon shown');
+    except
       on E: Exception do
       begin
-DebugLog('Exception creating placeholder icon: ' + E.Message);
-FreeAndNil(NewIcon);
+        DebugLog('Exception creating placeholder icon: ' + E.Message);
+        FreeAndNil(NewIcon);
         FGroupIcons[0] := nil;
       end;
     end;
-    
+
     // Включаем таймер
     if FTimer <> nil then
       FTimer.Enabled := True;
@@ -403,7 +415,7 @@ FreeAndNil(NewIcon);
   begin
     NewIcon := TTrayIcon.Create(nil);
     try
-DebugLog('Creating tray icon for group ' + IntToStr(I) + ': ' + Groups[I].Name);
+      DebugLog('Creating tray icon for group ' + IntToStr(I) + ': ' + Groups[I].Name);
 
       // В Lazarus TIcon создаётся автоматически при создании TTrayIcon
       // Но проверим, что он существует
@@ -411,7 +423,7 @@ DebugLog('Creating tray icon for group ' + IntToStr(I) + ': ' + Groups[I].Name);
       begin
         DebugLog('Icon is nil after TTrayIcon.Create!');
       end;
-NewIcon.Hint := BuildGroupHint(Groups[I]);
+      NewIcon.Hint := BuildGroupHint(Groups[I]);
       NewIcon.PopUpMenu := FPopupMenu;
       NewIcon.Tag := Groups[I].Id;
 
@@ -421,26 +433,26 @@ NewIcon.Hint := BuildGroupHint(Groups[I]);
         if (TempIcon <> nil) and (TempIcon.Handle <> 0) then
         begin
           NewIcon.Icon.Assign(TempIcon);
-DebugLog('Icon assigned successfully');
-end
+          DebugLog('Icon assigned successfully');
+        end
         else
         begin
-DebugLog('RenderGroupIcon returned nil or invalid handle');
-end;
+          DebugLog('RenderGroupIcon returned nil or invalid handle');
+        end;
       finally
         TempIcon.Free;
       end;
 
       FGroupIcons[I] := NewIcon;
-      
+
       // В Lazarus используется Show вместо Visible:=True
       NewIcon.Show;
-DebugLog('Icon shown successfully for group ' + IntToStr(I));
-except
+      DebugLog('Icon shown successfully for group ' + IntToStr(I));
+    except
       on E: Exception do
       begin
-DebugLog('Exception creating icon: ' + E.Message);
-FreeAndNil(NewIcon);
+        DebugLog('Exception creating icon: ' + E.Message);
+        FreeAndNil(NewIcon);
         FGroupIcons[I] := nil;
       end;
     end;
@@ -499,10 +511,10 @@ end;
 
 procedure TTrayController.UpdateTrayIcons;
 var
-  I, IconIdx: Integer;
+  I, IconIdx: integer;
   Groups: TGroupArray;
   NewIcon: TIcon;
-  J: Integer;
+  J: integer;
   OldState: ConfigManager.TNodeState;
 begin
   if FGroupManager = nil then Exit;
@@ -537,7 +549,8 @@ begin
       if (NewIcon <> nil) and (NewIcon.Handle <> 0) then
       begin
         FGroupIcons[IconIdx].Icon.Assign(NewIcon);
-        FGroupIcons[IconIdx].Hint := BuildGroupHint(Groups[I]);  // Обновляем подсказку
+        FGroupIcons[IconIdx].Hint := BuildGroupHint(Groups[I]);
+        // Обновляем подсказку
         // Иконка уже показана, просто обновляем
       end;
     finally
@@ -552,7 +565,8 @@ begin
     begin
       if J >= Length(FLastGroupStates[IconIdx]) then Continue;
       OldState := FLastGroupStates[IconIdx][J];
-      if (Groups[I].NodeStates[J] <> OldState) and (OldState <> ConfigManager.nsUnknown) then
+      if (Groups[I].NodeStates[J] <> OldState) and
+        (OldState <> ConfigManager.nsUnknown) then
         ShowStatusBalloon(IconIdx, Groups[I].NodeIds[J], Groups[I].NodeStates[J]);
     end;
 
@@ -566,7 +580,8 @@ begin
   DebugLog('UpdateTrayIcons completed');
 end;
 
-procedure TTrayController.ShowStatusBalloon(IconIdx, NodeId: Integer; NewState: ConfigManager.TNodeState);
+procedure TTrayController.ShowStatusBalloon(IconIdx, NodeId: integer;
+  NewState: ConfigManager.TNodeState);
 var
   Node: TNodeConfig;
   StateText: string;
@@ -581,10 +596,16 @@ begin
   if Node.Id = 0 then Exit;
 
   case NewState of
-    nsUp:   begin StateText := _('state_up');   Flags := bfInfo; end;
-    nsDown: begin StateText := _('state_down'); Flags := bfWarning; end;
-  else
-    Exit;  // nsUnknown — не показываем
+    nsUp: begin
+      StateText := _('state_up');
+      Flags := bfInfo;
+    end;
+    nsDown: begin
+      StateText := _('state_down');
+      Flags := bfWarning;
+    end;
+    else
+      Exit;  // nsUnknown — не показываем
   end;
 
   FGroupIcons[IconIdx].BalloonTitle := Node.Name;
@@ -594,9 +615,14 @@ begin
   FGroupIcons[IconIdx].ShowBalloonHint;
 end;
 
-function TTrayController.FindIconIndexByGroupId(Id: Integer): Integer;
+procedure TTrayController.OnUpdateBalloonClick(Sender: TObject);
+begin
+  ShellExecute(0, 'open', PChar(URL_RELEASES_LATEST), nil, nil, SW_SHOWNORMAL);
+end;
+
+function TTrayController.FindIconIndexByGroupId(Id: integer): integer;
 var
-  I: Integer;
+  I: integer;
 begin
   Result := -1;
   for I := 0 to High(FGroupIcons) do
@@ -609,11 +635,12 @@ begin
   end;
 end;
 
-procedure TTrayController.CreateIconForGroup(const Group: TGroupInfo; var OutIdx: Integer);
+procedure TTrayController.CreateIconForGroup(const Group: TGroupInfo;
+  var OutIdx: integer);
 var
   NewIcon: TTrayIcon;
   TempIcon: TIcon;
-  I: Integer;
+  I: integer;
 begin
   OutIdx := -1;
   NewIcon := TTrayIcon.Create(nil);
@@ -652,12 +679,13 @@ begin
   end;
 end;
 
-procedure TTrayController.SyncGroups(GroupManager: TGroupManager; NodeManager: TNodeManager);
+procedure TTrayController.SyncGroups(GroupManager: TGroupManager;
+  NodeManager: TNodeManager);
 var
   Groups: TGroupArray;
-  I, Idx: Integer;
-  ExistingIds: array of Boolean;
-  RemovedCount: Integer;
+  I, Idx: integer;
+  ExistingIds: array of boolean;
+  RemovedCount: integer;
 begin
   if GroupManager = nil then Exit;
 
@@ -763,9 +791,9 @@ begin
     FTimer.Enabled := True;
 end;
 
-function TTrayController.GroupStatesChanged: Boolean;
+function TTrayController.GroupStatesChanged: boolean;
 var
-  I, J, IconIdx: Integer;
+  I, J, IconIdx: integer;
   Groups: TGroupArray;
 begin
   Result := False;
@@ -813,7 +841,7 @@ end;
 procedure TTrayController.UpdateMenuLocalization;
 var
   MenuItem: TMenuItem;
-  I: Integer;
+  I: integer;
 begin
   // Recreate popup menu with new language
   if FPopupMenu <> nil then
@@ -822,19 +850,19 @@ begin
     for I := 0 to High(FGroupIcons) do
       if FGroupIcons[I] <> nil then
         FGroupIcons[I].PopUpMenu := nil;
-    
+
     FreeAndNil(FPopupMenu);
   end;
-  
+
   // Create new menu
   FPopupMenu := TPopupMenu.Create(nil);
-  
+
   // Settings item
   MenuItem := TMenuItem.Create(FPopupMenu);
   MenuItem.Caption := _('menu_settings');
   MenuItem.OnClick := @OnSettingsClick;
   FPopupMenu.Items.Add(MenuItem);
-  
+
   // Separator
   MenuItem := TMenuItem.Create(FPopupMenu);
   MenuItem.Caption := '-';
@@ -857,14 +885,14 @@ begin
   MenuItem.Caption := _('menu_exit');
   MenuItem.OnClick := @OnExitClick;
   FPopupMenu.Items.Add(MenuItem);
-  
+
   // Assign new menu to all group icons
   for I := 0 to High(FGroupIcons) do
     if FGroupIcons[I] <> nil then
       FGroupIcons[I].PopUpMenu := FPopupMenu;
 end;
 
-procedure TTrayController.SetSettingsEnabled(Enabled: Boolean);
+procedure TTrayController.SetSettingsEnabled(Enabled: boolean);
 var
   MenuItem: TMenuItem;
 begin
@@ -880,7 +908,27 @@ begin
   end;
 end;
 
+procedure TTrayController.ShowUpdateBalloon(const NewVersion: string);
+var
+  I, IconIdx: integer;
+begin
+  // Берём первую существующую иконку трея — на ней и покажем балун.
+  // Подходит и обычный режим (иконки групп), и режим заглушки.
+  IconIdx := -1;
+  for I := 0 to High(FGroupIcons) do
+    if FGroupIcons[I] <> nil then
+    begin
+      IconIdx := I;
+      Break;
+    end;
+  if IconIdx < 0 then Exit;
+
+  FGroupIcons[IconIdx].BalloonTitle := _('update_balloon_title');
+  FGroupIcons[IconIdx].BalloonHint := Format(_('update_balloon_text'), [NewVersion]);
+  FGroupIcons[IconIdx].BalloonFlags := bfInfo;
+  FGroupIcons[IconIdx].BalloonTimeout := 8000;
+  // 8 секунд — это разовое уведомление, имеет смысл подержать подольше
+  FGroupIcons[IconIdx].ShowBalloonHint;
+end;
+
 end.
-
-
-

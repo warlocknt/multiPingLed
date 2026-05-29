@@ -1,24 +1,34 @@
 program MultiPingLed;
 
 {$mode objfpc}{$H+}
-{$APPTYPE GUI}  // Компилируем как GUI приложение (без консольного окна)
+{$APPTYPE GUI}// Компилируем как GUI приложение (без консольного окна)
 
 uses
   {$IFDEF UNIX}
   cthreads,  // Поддержка потоков в Linux/Unix
-  {$ENDIF}
+{$ENDIF}
   Interfaces,  // LCL интерфейс
   Forms,       // Формы LCL
   Dialogs,     // Для ShowMessage
   SysUtils,    // для IncludeTrailingPathDelimiter
-  AppCore, ConfigManager, GroupManager, IconRenderer, NodeManager, PingHelper,
-  SettingsForm, NodeEditForm, GroupEditForm, TrayController, LangManager, AboutUnit;     // Ядро приложения
+  AppCore,
+  ConfigManager,
+  GroupManager,
+  IconRenderer,
+  NodeManager,
+  PingHelper,
+  SettingsForm,
+  NodeEditForm,
+  GroupEditForm,
+  TrayController,
+  LangManager,
+  AboutUnit, AppConstants;     // Ядро приложения
 
 var
   ConfigMgr: TConfigManager;
   LangDir, LangCode: string;
 
-{$R *.res}
+  {$R *.res}
 
 begin
   // Включаем масштабирование для высокого DPI
@@ -34,8 +44,9 @@ begin
 
   // Инициализация менеджера локализации
   LangDir := IncludeTrailingPathDelimiter(ExtractFilePath(Application.ExeName)) + 'lang';
-  GlobalLangPath := LangDir;  // Устанавливаем глобальную переменную
-  LangMgr.Initialize( LangDir );
+  GlobalLangPath := LangDir;
+  // Устанавливаем глобальную переменную
+  LangMgr.Initialize(LangDir);
 
   // Загрузка сохраненного языка
   ConfigMgr := TConfigManager.Create('');

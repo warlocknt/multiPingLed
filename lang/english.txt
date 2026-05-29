@@ -67,3 +67,5 @@ label_command_on_change=Command on node availability change (global):
 label_balloon_hint=Notify on node status change with a balloon hint
 label_run_on_ping_fail=Run on ping loss
 label_run_on_ping_restore=Run on ping restore
+update_balloon_title=New version available
+update_balloon_text=Version %s is available on GitHub
