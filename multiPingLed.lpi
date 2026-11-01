@@ -18,14 +18,12 @@
     </General>
     <VersionInfo>
       <UseVersionInfo Value="True"/>
-      <AutoIncrementBuild Value="True"/>
       <MajorVersionNr Value="1"/>
-      <MinorVersionNr Value="1"/>
-      <RevisionNr Value="6"/>
-      <BuildNr Value="755"/>
+      <MinorVersionNr Value="2"/>
+      <BuildNr Value="8"/>
       <Language Value="0419"/>
-      <Attributes pvaPatched="True"/>
-      <StringTable Comments="multiPingLed - lightweight Windows tray utility for monitoring multiple hosts via ICMP (ping) with LED-style status indicators" FileDescription="multiPingLed" InternalName="multiPingLed" OriginalFilename="multiPingLed.exe" ProductName="multiPingLed" ProductVersion="1.1"/>
+      <Attributes pvaPreRelease="True"/>
+      <StringTable Comments="lightweight Windows tray utility for monitoring multiple hosts via ICMP (ping) with LED-style status indicators" FileDescription="lightweight Windows tray utility for monitoring multiple hosts via ICMP (ping) with LED-style status indicators" InternalName="multiPingLed" OriginalFilename="multiPingLed.exe" ProductName="multiPingLed" ProductVersion="1.2.0.8"/>
     </VersionInfo>
     <BuildModes>
       <Item Name="Debug" Default="True"/>
@@ -37,28 +35,32 @@
             <Filename Value="multiPingLed"/>
           </Target>
           <SearchPaths>
-            <IncludeFiles Value="$(ProjOutDir)"/>
-            <UnitOutputDirectory Value="lib\$(TargetCPU)-$(TargetOS)"/>
+            <IncludeFiles Value="$(ProjOutDir);."/>
+            <Libraries Value="vendor\sqlite"/>
+            <OtherUnitFiles Value="."/>
+            <UnitOutputDirectory Value="lib\ide\release\$(TargetCPU)-$(TargetOS)"/>
+            <ObjectPath Value="vendor\sqlite"/>
           </SearchPaths>
           <CodeGeneration>
-            <SmartLinkUnit Value="True"/>
             <Optimizations>
-              <OptimizationLevel Value="3"/>
+              <OptimizationLevel Value="2"/>
             </Optimizations>
           </CodeGeneration>
           <Linking>
             <Debugging>
               <GenerateDebugInfo Value="False"/>
-              <RunWithoutDebug Value="True"/>
               <StripSymbols Value="True"/>
             </Debugging>
-            <LinkSmart Value="True"/>
             <Options>
               <Win32>
                 <GraphicApplication Value="True"/>
               </Win32>
             </Options>
           </Linking>
+          <Other>
+            <CustomOptions Value="-B"/>
+            <CompilerPath Value="$(ProjPath)tools\fpc_proxy.exe"/>
+          </Other>
         </CompilerOptions>
       </Item>
     </BuildModes>
@@ -71,12 +73,6 @@
     </RunParams>
     <RequiredPackages>
       <Item>
-        <PackageName Value="JvJansLazR"/>
-      </Item>
-      <Item>
-        <PackageName Value="JvJansLazD"/>
-      </Item>
-      <Item>
         <PackageName Value="LCL"/>
       </Item>
     </RequiredPackages>
@@ -84,49 +80,6 @@
       <Unit>
         <Filename Value="multiPingLed.lpr"/>
         <IsPartOfProject Value="True"/>
-        <UnitName Value="MultiPingLed"/>
-      </Unit>
-      <Unit>
-        <Filename Value="PingHelper.pas"/>
-        <IsPartOfProject Value="True"/>
-      </Unit>
-      <Unit>
-        <Filename Value="SettingsForm.pas"/>
-        <IsPartOfProject Value="True"/>
-        <ComponentName Value="SettingsForm"/>
-        <HasResources Value="True"/>
-        <ResourceBaseClass Value="Form"/>
-      </Unit>
-      <Unit>
-        <Filename Value="AppCore.pas"/>
-        <IsPartOfProject Value="True"/>
-      </Unit>
-      <Unit>
-        <Filename Value="ConfigManager.pas"/>
-        <IsPartOfProject Value="True"/>
-      </Unit>
-      <Unit>
-        <Filename Value="GroupManager.pas"/>
-        <IsPartOfProject Value="True"/>
-      </Unit>
-      <Unit>
-        <Filename Value="IconRenderer.pas"/>
-        <IsPartOfProject Value="True"/>
-      </Unit>
-      <Unit>
-        <Filename Value="NodeManager.pas"/>
-        <IsPartOfProject Value="True"/>
-      </Unit>
-      <Unit>
-        <Filename Value="TrayController.pas"/>
-        <IsPartOfProject Value="True"/>
-      </Unit>
-      <Unit>
-        <Filename Value="GroupEditForm.pas"/>
-        <IsPartOfProject Value="True"/>
-        <ComponentName Value="GroupEditForm"/>
-        <HasResources Value="True"/>
-        <ResourceBaseClass Value="Form"/>
       </Unit>
       <Unit>
         <Filename Value="aboutunit.pas"/>
@@ -137,9 +90,93 @@
         <UnitName Value="AboutUnit"/>
       </Unit>
       <Unit>
-        <Filename Value="appconstants.pas"/>
+        <Filename Value="AppCore.pas"/>
         <IsPartOfProject Value="True"/>
-        <UnitName Value="AppConstants"/>
+      </Unit>
+      <Unit>
+        <Filename Value="BuiltInTranslations.pas"/>
+        <IsPartOfProject Value="True"/>
+      </Unit>
+      <Unit>
+        <Filename Value="CommandRunner.pas"/>
+        <IsPartOfProject Value="True"/>
+      </Unit>
+      <Unit>
+        <Filename Value="ConfigManager.pas"/>
+        <IsPartOfProject Value="True"/>
+      </Unit>
+      <Unit>
+        <Filename Value="CustomHintForm.pas"/>
+        <IsPartOfProject Value="True"/>
+      </Unit>
+      <Unit>
+        <Filename Value="GroupEditForm.pas"/>
+        <IsPartOfProject Value="True"/>
+        <ComponentName Value="GroupEditForm"/>
+        <HasResources Value="True"/>
+        <ResourceBaseClass Value="Form"/>
+      </Unit>
+      <Unit>
+        <Filename Value="GroupManager.pas"/>
+        <IsPartOfProject Value="True"/>
+      </Unit>
+      <Unit>
+        <Filename Value="IconRenderer.pas"/>
+        <IsPartOfProject Value="True"/>
+      </Unit>
+      <Unit>
+        <Filename Value="LangManager.pas"/>
+        <IsPartOfProject Value="True"/>
+      </Unit>
+      <Unit>
+        <Filename Value="LogWriter.pas"/>
+        <IsPartOfProject Value="True"/>
+      </Unit>
+      <Unit>
+        <Filename Value="NodeEditForm.pas"/>
+        <IsPartOfProject Value="True"/>
+        <ComponentName Value="NodeEditForm"/>
+        <HasResources Value="True"/>
+        <ResourceBaseClass Value="Form"/>
+      </Unit>
+      <Unit>
+        <Filename Value="NodeManager.pas"/>
+        <IsPartOfProject Value="True"/>
+      </Unit>
+      <Unit>
+        <Filename Value="PingCompare.pas"/>
+        <IsPartOfProject Value="True"/>
+      </Unit>
+      <Unit>
+        <Filename Value="PingHelper.pas"/>
+        <IsPartOfProject Value="True"/>
+      </Unit>
+      <Unit>
+        <Filename Value="SessionHistory.pas"/>
+        <IsPartOfProject Value="True"/>
+      </Unit>
+      <Unit>
+        <Filename Value="SessionReport.pas"/>
+        <IsPartOfProject Value="True"/>
+      </Unit>
+      <Unit>
+        <Filename Value="SettingsForm.pas"/>
+        <IsPartOfProject Value="True"/>
+        <ComponentName Value="SettingsForm"/>
+        <HasResources Value="True"/>
+        <ResourceBaseClass Value="Form"/>
+      </Unit>
+      <Unit>
+        <Filename Value="SQLiteNative.pas"/>
+        <IsPartOfProject Value="True"/>
+      </Unit>
+      <Unit>
+        <Filename Value="TrayController.pas"/>
+        <IsPartOfProject Value="True"/>
+      </Unit>
+      <Unit>
+        <Filename Value="AppInstanceGuard.pas"/>
+        <IsPartOfProject Value="True"/>
       </Unit>
     </Units>
   </ProjectOptions>
@@ -150,8 +187,11 @@
       <Filename Value="multiPingLed-debug"/>
     </Target>
     <SearchPaths>
-      <IncludeFiles Value="$(ProjOutDir)"/>
-      <UnitOutputDirectory Value="lib\$(TargetCPU)-$(TargetOS)"/>
+      <IncludeFiles Value="$(ProjOutDir);."/>
+      <Libraries Value="vendor\sqlite"/>
+      <OtherUnitFiles Value="."/>
+      <UnitOutputDirectory Value="lib\ide\debug\$(TargetCPU)-$(TargetOS)"/>
+      <ObjectPath Value="vendor\sqlite"/>
     </SearchPaths>
     <Parsing>
       <SyntaxOptions>
@@ -160,18 +200,13 @@
     </Parsing>
     <CodeGeneration>
       <Checks>
-        <IOChecks Value="True"/>
         <RangeChecks Value="True"/>
         <OverflowChecks Value="True"/>
-        <StackChecks Value="True"/>
       </Checks>
-      <VerifyObjMethodCallValidity Value="True"/>
     </CodeGeneration>
     <Linking>
       <Debugging>
         <DebugInfoType Value="dsDwarf3"/>
-        <UseHeaptrc Value="True"/>
-        <UseExternalDbgSyms Value="True"/>
       </Debugging>
       <Options>
         <Win32>
@@ -179,6 +214,10 @@
         </Win32>
       </Options>
     </Linking>
+    <Other>
+      <CustomOptions Value="-B"/>
+      <CompilerPath Value="$(ProjPath)tools\fpc_proxy.exe"/>
+    </Other>
   </CompilerOptions>
   <Debugging>
     <Exceptions>

@@ -1,14 +1,14 @@
 object NodeEditForm: TNodeEditForm
-  Left = 0
-  Height = 299
-  Top = 0
+  Left = 413
+  Height = 352
+  Top = 266
   Width = 350
   BorderStyle = bsDialog
   Caption = 'Node'
-  ClientHeight = 299
+  ClientHeight = 352
   ClientWidth = 350
   Position = poScreenCenter
-  LCLVersion = '4.4.0.0'
+  OnCreate = FormCreate
   object lblName: TLabel
     Left = 8
     Height = 15
@@ -71,10 +71,10 @@ object NodeEditForm: TNodeEditForm
   object btnOK: TButton
     Left = 165
     Height = 25
-    Top = 253
+    Top = 311
     Width = 75
     Anchors = [akRight, akBottom]
-    Caption = 'OK'
+    Caption = 'Apply'
     Default = True
     ModalResult = 1
     TabOrder = 4
@@ -82,12 +82,67 @@ object NodeEditForm: TNodeEditForm
   object btnCancel: TButton
     Left = 255
     Height = 25
-    Top = 253
+    Top = 311
     Width = 75
     Anchors = [akRight, akBottom]
     Cancel = True
     Caption = 'Cancel'
     ModalResult = 2
     TabOrder = 5
+  end
+  object eRunOnPingFail: TEdit
+    Left = 18
+    Height = 23
+    Top = 160
+    Width = 312
+    TabOrder = 6
+  end
+  object eRunOnPingResore: TEdit
+    Left = 18
+    Height = 23
+    Top = 215
+    Width = 312
+    TabOrder = 7
+  end
+  object cbOnPingFail: TCheckBox
+    Left = 18
+    Height = 19
+    Top = 141
+    Width = 180
+    Caption = 'Run on ping loss'
+    TabOrder = 8
+    OnClick = cbOnPingFailClick
+  end
+  object cbOnPingRestore: TCheckBox
+    Left = 18
+    Height = 19
+    Top = 196
+    Width = 232
+    Caption = 'Run on ping restore'
+    TabOrder = 9
+    OnClick = cbOnPingRestoreClick
+  end
+  object NodeNotifications: TCheckBox
+    Left = 18
+    Height = 22
+    Top = 245
+    Width = 312
+    Caption = 'Notify on status changes'
+    TabOrder = 10
+  end
+  object NodeFailureLabel: TLabel
+    Left = 18
+    Height = 20
+    Top = 276
+    Width = 235
+    Caption = 'Failures before DOWN:'
+  end
+  object NodeFailureThreshold: TEdit
+    Left = 260
+    Height = 23
+    Top = 272
+    Width = 65
+    TabOrder = 11
+    Text = 'NodeFailureThreshold'
   end
 end

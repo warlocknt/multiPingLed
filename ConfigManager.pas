@@ -1,4 +1,4 @@
-unit ConfigManager;
+﻿unit ConfigManager;
 
 {$mode objfpc}{$H+}
 
@@ -8,39 +8,48 @@ uses
   Classes, SysUtils, IniFiles, Windows;
 
 var
-  GlobalConfigPath: string = '';
-  // Глобальный путь к конфигу, устанавливается при старте приложения
-  GlobalLangPath: string = '';
-  // Глобальный путь к языковым файлам
+  GlobalConfigPath: string = '';  // Глобальный путь к конфигу, устанавливается при старте приложения
+  GlobalLangPath: string = '';    // Глобальный путь к языковым файлам
 
 type
   TNodeState = (nsUnknown, nsUp, nsDown);
-
+  
   TNodeConfig = record
-    Id: integer;
+    Id: Integer;
     Name: string;
     Host: string;
-    IntervalMs: integer;
-    TimeoutMs: integer;
+    IntervalMs: Integer;
+    TimeoutMs: Integer;
+    FailThreshold: Integer; // Zero means the default of three consecutive failures.
+    NotificationsMuted: Boolean;
+    LastStateChange: TDateTime;
+    ConsecutiveFailures: Integer;
+    ProbeCount, ProbeIndex, ProbeLosses: Integer;
+    ProbeHistory: array[0..19] of Boolean; // True means a lost probe.
     State: TNodeState;
     LastPingTime: TDateTime;
-    LastPingMs: integer;
+    LastPingMs: Integer;
     // Внешняя команда при смене статуса (единая строка: путь + параметры)
     Command: string;
+    DownCommand: string;
+    UpCommand: string;
   end;
-
+  
   TGroupType = (gtSingle, gt2x2, gt3x3);
-
+  
   TNodeGroup = record
-    Id: integer;
+    Id: Integer;
     Name: string;
     GroupType: TGroupType;
-    NodeIds: array of integer;
-    Enabled: boolean;
+    NodeIds: array of Integer;
+    Enabled: Boolean;
   end;
-
+  
   TAppConfig = record
     Version: string;
+    LoggingEnabled: Boolean;
+    ComparePingEnabled: Boolean;
+    CreateSessionReport: Boolean;
     Nodes: array of TNodeConfig;
     Groups: array of TNodeGroup;
   end;
@@ -52,63 +61,82 @@ type
     FConfig: TAppConfig;
     FConfigPath: string;
     FConfigDir: string;
+    FImportedLanguage: string;
+    FImportedBalloon: Integer;
     function NodeStateToStr(State: TNodeState): string;
     function StrToNodeState(const S: string): TNodeState;
     function GroupTypeToStr(GType: TGroupType): string;
     function StrToGroupType(const S: string): TGroupType;
-    function BoolToStrEx(Value: boolean): string;
-    function StrToBoolEx(const S: string): boolean;
+    function BoolToStrEx(Value: Boolean): string;
+    function StrToBoolEx(const S: string): Boolean;
+
   public
-    constructor Create(ConfigDir: string);
-    function ConfigExists: boolean;
+    constructor Create(ConfigDir: string = '');
+    function ConfigExists: Boolean;
     procedure LoadConfig;
-    procedure SaveConfig;
+    procedure SaveConfig(const Language: string = ''; BalloonHint: Integer = -1);
     procedure SetVersion(Ver: string);
     function GetVersion: string;
     function GetConfig: TAppConfig;
     procedure SetConfig(const Config: TAppConfig);
-    function ValidateConfig(out ErrorMsg: string): boolean;
-    function ImportConfig(const FileName: string; out ErrorMsg: string): boolean;
+    function ValidateConfig(out ErrorMsg: string): Boolean;
+    function ImportConfig(const FileName: string; out ErrorMsg: string): Boolean;
     procedure ExportConfig(const FileName: string);
-
+    
     // Language settings
     function GetLanguage: string;
     procedure SetLanguage(const LangCode: string);
 
     // Balloon hint settings
-    function GetBalloonHintEnabled: boolean;
-    procedure SetBalloonHintEnabled(Value: boolean);
+    function GetBalloonHintEnabled: Boolean;
+    procedure SetBalloonHintEnabled(Value: Boolean);
   end;
 
-// Единая логика разрешения пути к конфигу: сначала портативный config.ini
-// рядом с exe, затем APPDATA\multiPingLed\config.ini. Используется и в .lpr,
-// и в AppCore, чтобы путь (и читаемый из него язык) не расходились.
-function ResolveConfigPath: string;
+function ResolveAppConfigPath: string; overload;
+function ResolveAppConfigPath(const ExeDirectory, RoamingDirectory: string): string; overload;
+
+function CloneConfig(const Config: TAppConfig): TAppConfig;
 
 implementation
 
-function ResolveConfigPath: string;
-var
-  ExeDir, AppDataDir, LocalConfig: string;
+uses LogWriter, LangManager;
+
+function ResolveAppConfigPath(const ExeDirectory, RoamingDirectory: string): string;
+var LocalConfig: string;
 begin
-  ExeDir := ExtractFilePath(ParamStr(0));
-  LocalConfig := ExeDir + 'config.ini';
+  LocalConfig := IncludeTrailingPathDelimiter(ExeDirectory) + 'config.ini';
+  if FileExists(LocalConfig) then Exit(LocalConfig);
+  Result := IncludeTrailingPathDelimiter(RoamingDirectory) + 'multiPingLed' + PathDelim + 'config.ini';
+end;
 
-  // Приоритет 1: конфиг рядом с exe (портативный режим)
-  if FileExists(LocalConfig) then
-    Exit(LocalConfig);
+function ResolveAppConfigPath: string;
+begin
+  Result := ResolveAppConfigPath(ExtractFilePath(ParamStr(0)), SysUtils.GetEnvironmentVariable('APPDATA'));
+end;
 
-  // Приоритет 2: AppData\Roaming\multiPingLed\
-  AppDataDir := SysUtils.GetEnvironmentVariable('APPDATA') + '\multiPingLed\';
-  Result := AppDataDir + 'config.ini';
+
+function CloneConfig(const Config: TAppConfig): TAppConfig;
+var I: Integer;
+begin
+  Result := Config;
+  Result.Nodes := Copy(Config.Nodes, 0, Length(Config.Nodes));
+  Result.Groups := Copy(Config.Groups, 0, Length(Config.Groups));
+  for I := 0 to High(Result.Groups) do
+    Result.Groups[I].NodeIds := Copy(Config.Groups[I].NodeIds, 0, Length(Config.Groups[I].NodeIds));
+end;
+
+procedure CheckCount(Value: Integer; const Kind: string);
+begin
+  if (Value < 0) or (Value > 4096) then
+    raise ERangeError.Create(Format(_('error_count'), [_('count_' + Kind + 's')]));
 end;
 
 procedure ConfigDebugLog(const Msg: string);
 begin
-  OutputDebugString(PChar('multiPingLed[Config]: ' + Msg));
+  ApplicationLog('multiPingLed[Config]: ' + Msg);
 end;
 
-constructor TConfigManager.Create(ConfigDir: string);
+constructor TConfigManager.Create(ConfigDir:string);
 begin
   inherited Create;
   if ConfigDir <> '' then
@@ -116,6 +144,7 @@ begin
   else
     FConfigPath := GlobalConfigPath;
   FConfigDir := ExtractFilePath(FConfigPath);
+  FImportedBalloon := -1;
   FConfig.Version := '0.0';
   SetLength(FConfig.Nodes, 0);
   SetLength(FConfig.Groups, 0);
@@ -124,8 +153,8 @@ end;
 
 function TConfigManager.NodeStateToStr(State: TNodeState): string;
 begin
-  Result := 'unknown';
   case State of
+    nsUnknown: Result := 'unknown';
     nsUp: Result := 'up';
     nsDown: Result := 'down';
   end;
@@ -135,14 +164,13 @@ function TConfigManager.StrToNodeState(const S: string): TNodeState;
 begin
   if S = 'up' then Result := nsUp
   else if S = 'down' then Result := nsDown
-  else
-    Result := nsUnknown;
+  else Result := nsUnknown;
 end;
 
 function TConfigManager.GroupTypeToStr(GType: TGroupType): string;
 begin
-  Result := 'single';
   case GType of
+    gtSingle: Result := 'single';
     gt2x2: Result := '2x2';
     gt3x3: Result := '3x3';
   end;
@@ -152,143 +180,65 @@ function TConfigManager.StrToGroupType(const S: string): TGroupType;
 begin
   if S = '2x2' then Result := gt2x2
   else if S = '3x3' then Result := gt3x3
-  else
-    Result := gtSingle;
+  else Result := gtSingle;
 end;
 
-function TConfigManager.BoolToStrEx(Value: boolean): string;
+function TConfigManager.BoolToStrEx(Value: Boolean): string;
 begin
   Result := BoolToStr(Value, True);
 end;
 
-function TConfigManager.StrToBoolEx(const S: string): boolean;
+function TConfigManager.StrToBoolEx(const S: string): Boolean;
 begin
-  if not TryStrToBool(S, Result) then
-    Result := False;
-  // если строка некорректная, возвращаем False
+ if not TryStrToBool(S, Result) then
+    Result := False; // если строка некорректная, возвращаем False
 end;
 
-function TConfigManager.ConfigExists: boolean;
+function TConfigManager.ConfigExists: Boolean;
 begin
   Result := FileExists(FConfigPath);
 end;
 
 procedure TConfigManager.LoadConfig;
-var
-  Ini: TIniFile;
-  NodeCount, GroupCount: integer;
-  I, J: integer;
-  NodeIdsStr: string;
-  TempIds: TStringList;
-  PosComma: integer;
+var ErrorMsg: string;
 begin
-  ConfigDebugLog('Loading config from ' + FConfigPath);
-  if not FileExists(FConfigPath) then
-  begin
-    ConfigDebugLog('Config file not found, using defaults');
-    Exit;
-  end;
-
-  Ini := TIniFile.Create(FConfigPath);
-  try
-    FConfig.Version := Ini.ReadString('General', 'Version', '0.0');
-
-    NodeCount := Ini.ReadInteger('General', 'NodeCount', 0);
-    SetLength(FConfig.Nodes, NodeCount);
-
-    for I := 0 to NodeCount - 1 do
-    begin
-      FConfig.Nodes[I].Id := Ini.ReadInteger('Node' + IntToStr(I), 'Id', I + 1);
-      FConfig.Nodes[I].Name := Ini.ReadString('Node' + IntToStr(I), 'Name', '');
-      FConfig.Nodes[I].Host := Ini.ReadString('Node' + IntToStr(I), 'Host', '');
-      FConfig.Nodes[I].IntervalMs :=
-        Ini.ReadInteger('Node' + IntToStr(I), 'IntervalMs', 5000);
-      FConfig.Nodes[I].TimeoutMs :=
-        Ini.ReadInteger('Node' + IntToStr(I), 'TimeoutMs', 2000);
-      FConfig.Nodes[I].State :=
-        StrToNodeState(Ini.ReadString('Node' + IntToStr(I), 'State', 'unknown'));
-      FConfig.Nodes[I].Command := Ini.ReadString('Node' + IntToStr(I), 'Command', '');
-    end;
-
-    GroupCount := Ini.ReadInteger('General', 'GroupCount', 0);
-    SetLength(FConfig.Groups, GroupCount);
-
-    for I := 0 to GroupCount - 1 do
-    begin
-      FConfig.Groups[I].Id := Ini.ReadInteger('Group' + IntToStr(I), 'Id', I + 1);
-      FConfig.Groups[I].Name := Ini.ReadString('Group' + IntToStr(I), 'Name', '');
-      FConfig.Groups[I].GroupType :=
-        StrToGroupType(Ini.ReadString('Group' + IntToStr(I), 'Type', 'single'));
-
-      FConfig.Groups[I].Enabled :=
-        StrToBoolEx(Ini.ReadString('Group' + IntToStr(I), 'Enabled', 'True'));
-
-      NodeIdsStr := Ini.ReadString('Group' + IntToStr(I), 'NodeIds', '');
-
-      // Parse NodeIds dynamically
-      TempIds := TStringList.Create;
-      try
-        // Split by comma
-        while NodeIdsStr <> '' do
-        begin
-          PosComma := Pos(',', NodeIdsStr);
-          if PosComma > 0 then
-          begin
-            TempIds.Add(Trim(Copy(NodeIdsStr, 1, PosComma - 1)));
-            Delete(NodeIdsStr, 1, PosComma);
-          end
-          else
-          begin
-            TempIds.Add(Trim(NodeIdsStr));
-            NodeIdsStr := '';
-          end;
-        end;
-
-        // Set dynamic array size and fill
-        SetLength(FConfig.Groups[I].NodeIds, TempIds.Count);
-        for J := 0 to TempIds.Count - 1 do
-          FConfig.Groups[I].NodeIds[J] := StrToIntDef(TempIds[J], 0);
-      finally
-        TempIds.Free;
-      end;
-    end;
-  finally
-    Ini.Free;
-  end;
-  ConfigDebugLog('Config loaded: ' + IntToStr(Length(FConfig.Nodes)) +
-    ' nodes, ' + IntToStr(Length(FConfig.Groups)) + ' groups');
+  if not FileExists(FConfigPath) then Exit;
+  if not ImportConfig(FConfigPath, ErrorMsg) then
+    raise EInOutError.Create(ErrorMsg);
 end;
 
-procedure TConfigManager.SaveConfig;
+procedure TConfigManager.SaveConfig(const Language: string; BalloonHint: Integer);
 var
-  Ini: TIniFile;
-  I, J: integer;
-  NodeIdsStr: string;
-  Sections: TStringList;
+  Ini: TMemIniFile;
+  I, J: Integer;
+  NodeIdsStr, TempFile, ErrorMsg, DesiredLanguage: string;
+  DesiredBalloon: Integer;
 begin
+  if FConfigPath = '' then raise EInOutError.Create(_('error_config_path'));
+  if not ValidateConfig(ErrorMsg) then raise EInOutError.Create(ErrorMsg);
   ConfigDebugLog('Saving config to ' + FConfigPath);
-  if not DirectoryExists(FConfigDir) then
+  if (FConfigDir <> '') and not DirectoryExists(FConfigDir) then
     ForceDirectories(FConfigDir);
-
-  Ini := TIniFile.Create(FConfigPath);
+  
+  TempFile := FConfigPath + '.tmp-' + IntToStr(GetCurrentProcessId) + '-' + IntToStr(GetTickCount64);
+  Ini := nil;
   try
-    // Удаляем старые секции Node*/Group* перед записью: TIniFile не перезаписывает
-    // файл целиком, поэтому при уменьшении числа узлов/групп оставались бы
-    // «осиротевшие» секции.
-    Sections := TStringList.Create;
-    try
-      Ini.ReadSections(Sections);
-      for I := 0 to Sections.Count - 1 do
-        if (Pos('Node', Sections[I]) = 1) or (Pos('Group', Sections[I]) = 1) then
-          Ini.EraseSection(Sections[I]);
-    finally
-      Sections.Free;
-    end;
-
+    Ini := TMemIniFile.Create(FConfigPath);
+    Ini.Rename(TempFile, False);
+    DesiredLanguage := Language;
+    if DesiredLanguage = '' then DesiredLanguage := FImportedLanguage;
+    DesiredBalloon := BalloonHint;
+    if DesiredBalloon < 0 then DesiredBalloon := FImportedBalloon;
+    if DesiredLanguage <> '' then Ini.WriteString('General', 'Language', DesiredLanguage);
+    if DesiredBalloon >= 0 then
+      Ini.WriteString('General', 'BalloonHintEnabled', BoolToStrEx(DesiredBalloon <> 0));
     Ini.WriteString('General', 'Version', FConfig.Version);
+    Ini.WriteBool('General', 'LoggingEnabled', FConfig.LoggingEnabled);
+    Ini.WriteBool('General', 'ComparePingEnabled', FConfig.ComparePingEnabled);
+    Ini.WriteBool('General', 'CreateSessionReport', FConfig.CreateSessionReport);
     Ini.WriteInteger('General', 'NodeCount', Length(FConfig.Nodes));
     Ini.WriteInteger('General', 'GroupCount', Length(FConfig.Groups));
-
+    
     for I := 0 to High(FConfig.Nodes) do
     begin
       Ini.WriteInteger('Node' + IntToStr(I), 'Id', FConfig.Nodes[I].Id);
@@ -296,34 +246,39 @@ begin
       Ini.WriteString('Node' + IntToStr(I), 'Host', FConfig.Nodes[I].Host);
       Ini.WriteInteger('Node' + IntToStr(I), 'IntervalMs', FConfig.Nodes[I].IntervalMs);
       Ini.WriteInteger('Node' + IntToStr(I), 'TimeoutMs', FConfig.Nodes[I].TimeoutMs);
-      Ini.WriteString('Node' + IntToStr(I), 'State',
-        NodeStateToStr(FConfig.Nodes[I].State));
+      Ini.WriteInteger('Node' + IntToStr(I), 'FailThreshold', FConfig.Nodes[I].FailThreshold);
+      Ini.WriteBool('Node' + IntToStr(I), 'NotificationsMuted', FConfig.Nodes[I].NotificationsMuted);
+      Ini.WriteString('Node' + IntToStr(I), 'State', NodeStateToStr(FConfig.Nodes[I].State));
       Ini.WriteString('Node' + IntToStr(I), 'Command', FConfig.Nodes[I].Command);
+      Ini.WriteString('Node' + IntToStr(I), 'DownCommand', FConfig.Nodes[I].DownCommand);
+      Ini.WriteString('Node' + IntToStr(I), 'UpCommand', FConfig.Nodes[I].UpCommand);
     end;
-
+    
     for I := 0 to High(FConfig.Groups) do
     begin
       Ini.WriteInteger('Group' + IntToStr(I), 'Id', FConfig.Groups[I].Id);
       Ini.WriteString('Group' + IntToStr(I), 'Name', FConfig.Groups[I].Name);
-      Ini.WriteString('Group' + IntToStr(I), 'Type',
-        GroupTypeToStr(FConfig.Groups[I].GroupType));
-      Ini.WriteString('Group' + IntToStr(I), 'Enabled',
-        BoolToStrEx(FConfig.Groups[I].Enabled));
+      Ini.WriteString('Group' + IntToStr(I), 'Type', GroupTypeToStr(FConfig.Groups[I].GroupType));
+      Ini.WriteString('Group' + IntToStr(I), 'Enabled', BoolToStrEx(FConfig.Groups[I].Enabled));
 
-
+      
       NodeIdsStr := '';
       for J := 0 to High(FConfig.Groups[I].NodeIds) do
       begin
-        if FConfig.Groups[I].NodeIds[J] > 0 then
-        begin
-          if NodeIdsStr <> '' then NodeIdsStr := NodeIdsStr + ',';
-          NodeIdsStr := NodeIdsStr + IntToStr(FConfig.Groups[I].NodeIds[J]);
-        end;
+        if J > 0 then NodeIdsStr := NodeIdsStr + ',';
+        NodeIdsStr := NodeIdsStr + IntToStr(FConfig.Groups[I].NodeIds[J]);
       end;
       Ini.WriteString('Group' + IntToStr(I), 'NodeIds', NodeIdsStr);
     end;
+    Ini.UpdateFile;
+    FreeAndNil(Ini);
+    if not MoveFileExW(PWideChar(UTF8Decode(TempFile)), PWideChar(UTF8Decode(FConfigPath)),
+      MOVEFILE_REPLACE_EXISTING or $00000008 { MOVEFILE_WRITE_THROUGH }) then RaiseLastOSError;
+    FImportedLanguage := '';
+    FImportedBalloon := -1;
   finally
     Ini.Free;
+    if FileExists(TempFile) then SysUtils.DeleteFile(TempFile);
   end;
 end;
 
@@ -339,70 +294,106 @@ end;
 
 function TConfigManager.GetConfig: TAppConfig;
 begin
-  Result := FConfig;
+  Result := CloneConfig(FConfig);
 end;
 
 procedure TConfigManager.SetConfig(const Config: TAppConfig);
 begin
-  FConfig := Config;
+  FConfig := CloneConfig(Config);
 end;
 
-function TConfigManager.ValidateConfig(out ErrorMsg: string): boolean;
+function TConfigManager.ValidateConfig(out ErrorMsg: string): Boolean;
 var
-  I, J, K: integer;
-  NodeCount: integer;
+  I, J, K: Integer;
+  NodeCount: Integer;
   Hosts: TStringList;
-  NodeIdFound: boolean;
-  GroupNodeCount: integer;
+  NodeIdFound: Boolean;
+  GroupNodeCount: Integer;
   NodeIdList: TStringList;
 begin
   Result := False;
   ErrorMsg := '';
-
+  
   Hosts := TStringList.Create;
   NodeIdList := TStringList.Create;
   try
     NodeCount := Length(FConfig.Nodes);
-
+    if (NodeCount > 4096) or (Length(FConfig.Groups) > 4096) then
+    begin
+      ErrorMsg := _('error_too_many');
+      Exit;
+    end;
+    
     for I := 0 to NodeCount - 1 do
     begin
+      if FConfig.Nodes[I].Id <= 0 then
+      begin
+        ErrorMsg := _('error_node_id_positive'); Exit;
+      end;
+      for K := 0 to I - 1 do
+        if FConfig.Nodes[K].Id = FConfig.Nodes[I].Id then
+        begin
+          ErrorMsg := _('error_duplicate_node_id'); Exit;
+        end;
       if Trim(FConfig.Nodes[I].Host) = '' then
       begin
-        ErrorMsg := Format('Node %d has empty host', [FConfig.Nodes[I].Id]);
+        ErrorMsg := Format(_('error_node_empty_host'), [FConfig.Nodes[I].Id]);
         Exit;
       end;
-
+      
       if Hosts.IndexOf(FConfig.Nodes[I].Host) >= 0 then
       begin
-        ErrorMsg := Format('Duplicate host: %s', [FConfig.Nodes[I].Host]);
+        ErrorMsg := Format(_('error_duplicate_host'), [FConfig.Nodes[I].Host]);
         Exit;
       end;
       Hosts.Add(FConfig.Nodes[I].Host);
-
+      
       if FConfig.Nodes[I].IntervalMs <= 0 then
       begin
-        ErrorMsg := Format('Node %d has invalid interval', [FConfig.Nodes[I].Id]);
+        ErrorMsg := Format(_('error_node_interval'), [FConfig.Nodes[I].Id]);
         Exit;
       end;
-
-      if FConfig.Nodes[I].TimeoutMs <= 0 then
+      
+      if (FConfig.Nodes[I].FailThreshold < 0) or (FConfig.Nodes[I].FailThreshold > 20) then
       begin
-        ErrorMsg := Format('Node %d has invalid timeout', [FConfig.Nodes[I].Id]);
+        ErrorMsg := _('error_failure_range');
+        Exit(False);
+      end;
+      if (FConfig.Nodes[I].TimeoutMs <= 0) or (FConfig.Nodes[I].TimeoutMs > 60000) then
+      begin
+        ErrorMsg := Format(_('error_node_timeout'), [FConfig.Nodes[I].Id]);
         Exit;
       end;
     end;
-
+    
     for I := 0 to High(FConfig.Groups) do
     begin
+      if FConfig.Groups[I].Id <= 0 then
+      begin
+        ErrorMsg := _('error_group_id_positive'); Exit;
+      end;
+      for K := 0 to I - 1 do
+        if FConfig.Groups[K].Id = FConfig.Groups[I].Id then
+        begin
+          ErrorMsg := _('error_duplicate_group_id'); Exit;
+        end;
+      if Length(FConfig.Groups[I].NodeIds) > 9 then
+      begin
+        ErrorMsg := _('error_group_slots'); Exit;
+      end;
       GroupNodeCount := 0;
       NodeIdList.Clear;
-
+      
       for J := 0 to High(FConfig.Groups[I].NodeIds) do
       begin
+        if FConfig.Groups[I].NodeIds[J] < 0 then
+        begin
+          ErrorMsg := _('error_negative_node_id'); Exit;
+        end;
         if FConfig.Groups[I].NodeIds[J] > 0 then
         begin
           Inc(GroupNodeCount);
-
+          
           NodeIdFound := False;
           for K := 0 to NodeCount - 1 do
           begin
@@ -412,31 +403,33 @@ begin
               Break;
             end;
           end;
-
+          
           if not NodeIdFound then
           begin
-            ErrorMsg := Format('Group %d references non-existent node %d',
+            ErrorMsg := Format(_('error_group_missing_node'), 
               [FConfig.Groups[I].Id, FConfig.Groups[I].NodeIds[J]]);
             Exit;
           end;
-
+          
           if NodeIdList.IndexOf(IntToStr(FConfig.Groups[I].NodeIds[J])) >= 0 then
           begin
-            ErrorMsg := Format('Group %d has duplicate node %d',
+            ErrorMsg := Format(_('error_group_duplicate_node'), 
               [FConfig.Groups[I].Id, FConfig.Groups[I].NodeIds[J]]);
             Exit;
           end;
           NodeIdList.Add(IntToStr(FConfig.Groups[I].NodeIds[J]));
         end;
       end;
-
-      if GroupNodeCount > 9 then
+      
+      if ((FConfig.Groups[I].GroupType = gtSingle) and (GroupNodeCount > 1)) or
+        ((FConfig.Groups[I].GroupType = gt2x2) and (GroupNodeCount > 4)) or
+        (GroupNodeCount > 9) then
       begin
-        ErrorMsg := Format('Group %d has more than 9 nodes', [FConfig.Groups[I].Id]);
+        ErrorMsg := Format(_('error_group_node_limit'), [FConfig.Groups[I].Id]);
         Exit;
       end;
     end;
-
+    
     Result := True;
   finally
     Hosts.Free;
@@ -444,107 +437,97 @@ begin
   end;
 end;
 
-function TConfigManager.ImportConfig(const FileName: string;
-  out ErrorMsg: string): boolean;
+function TConfigManager.ImportConfig(const FileName: string; out ErrorMsg: string): Boolean;
 var
   TempConfig: TAppConfig;
   Ini: TIniFile;
-  NodeCount, GroupCount: integer;
-  I, J: integer;
+  NodeCount, GroupCount: Integer;
+  I, J: Integer;
   NodeIdsStr: string;
   OldConfig: TAppConfig;
-  TempIds: TStringList;
-  PosComma: integer;
+  ImportedLanguage: string;
+  ImportedBalloon: Integer;
 begin
   Result := False;
   ErrorMsg := '';
-
+  
   if not FileExists(FileName) then
   begin
-    ErrorMsg := 'File not found';
+    ErrorMsg := _('error_file_not_found');
     Exit;
   end;
-
+  
   OldConfig := FConfig;
-
+  
   try
     Ini := TIniFile.Create(FileName);
     try
-      // Версию тоже читаем из импортируемого файла (ранее терялась)
-      TempConfig.Version := Ini.ReadString('General', 'Version', '0.0');
-
+      ImportedLanguage := Ini.ReadString('General', 'Language', '');
+      ImportedBalloon := -1;
+      if Ini.ValueExists('General', 'BalloonHintEnabled') then
+        ImportedBalloon := Ord(StrToBoolEx(Ini.ReadString('General', 'BalloonHintEnabled', 'True')));
       NodeCount := Ini.ReadInteger('General', 'NodeCount', 0);
+      CheckCount(NodeCount, 'node');
+      TempConfig.Version := Ini.ReadString('General', 'Version', FConfig.Version);
+      TempConfig.LoggingEnabled := Ini.ReadBool('General', 'LoggingEnabled', False);
+      TempConfig.ComparePingEnabled := Ini.ReadBool('General', 'ComparePingEnabled', False);
+      TempConfig.CreateSessionReport := Ini.ReadBool('General', 'CreateSessionReport', False);
       SetLength(TempConfig.Nodes, NodeCount);
-
+      
       for I := 0 to NodeCount - 1 do
       begin
         TempConfig.Nodes[I].Id := Ini.ReadInteger('Node' + IntToStr(I), 'Id', I + 1);
         TempConfig.Nodes[I].Name := Ini.ReadString('Node' + IntToStr(I), 'Name', '');
         TempConfig.Nodes[I].Host := Ini.ReadString('Node' + IntToStr(I), 'Host', '');
-        TempConfig.Nodes[I].IntervalMs :=
-          Ini.ReadInteger('Node' + IntToStr(I), 'IntervalMs', 5000);
-        TempConfig.Nodes[I].TimeoutMs :=
-          Ini.ReadInteger('Node' + IntToStr(I), 'TimeoutMs', 2000);
-        TempConfig.Nodes[I].State :=
-          StrToNodeState(Ini.ReadString('Node' + IntToStr(I), 'State', 'unknown'));
-        TempConfig.Nodes[I].Command :=
-          Ini.ReadString('Node' + IntToStr(I), 'Command', '');
+        TempConfig.Nodes[I].IntervalMs := Ini.ReadInteger('Node' + IntToStr(I), 'IntervalMs', 5000);
+        TempConfig.Nodes[I].TimeoutMs := Ini.ReadInteger('Node' + IntToStr(I), 'TimeoutMs', 2000);
+        TempConfig.Nodes[I].FailThreshold := Ini.ReadInteger('Node' + IntToStr(I), 'FailThreshold', 3);
+        TempConfig.Nodes[I].NotificationsMuted := Ini.ReadBool('Node' + IntToStr(I), 'NotificationsMuted', False);
+        TempConfig.Nodes[I].State := StrToNodeState(Ini.ReadString('Node' + IntToStr(I), 'State', 'unknown'));
+        TempConfig.Nodes[I].Command := Ini.ReadString('Node' + IntToStr(I), 'Command', '');
+        TempConfig.Nodes[I].DownCommand := Ini.ReadString('Node' + IntToStr(I), 'DownCommand', '');
+        TempConfig.Nodes[I].UpCommand := Ini.ReadString('Node' + IntToStr(I), 'UpCommand', '');
       end;
-
+      
       GroupCount := Ini.ReadInteger('General', 'GroupCount', 0);
+      CheckCount(GroupCount, 'group');
       SetLength(TempConfig.Groups, GroupCount);
-
+      
       for I := 0 to GroupCount - 1 do
       begin
         TempConfig.Groups[I].Id := Ini.ReadInteger('Group' + IntToStr(I), 'Id', I + 1);
         TempConfig.Groups[I].Name := Ini.ReadString('Group' + IntToStr(I), 'Name', '');
-        TempConfig.Groups[I].GroupType :=
-          StrToGroupType(Ini.ReadString('Group' + IntToStr(I), 'Type', 'single'));
-        TempConfig.Groups[I].Enabled :=
-          StrToBoolEx(Ini.ReadString('Group' + IntToStr(I), 'Enabled', 'True'));
+        TempConfig.Groups[I].GroupType := StrToGroupType(Ini.ReadString('Group' + IntToStr(I), 'Type', 'single'));
+        TempConfig.Groups[I].Enabled := StrToBoolEx(Ini.ReadString('Group' + IntToStr(I), 'Enabled', 'True'));
 
         NodeIdsStr := Ini.ReadString('Group' + IntToStr(I), 'NodeIds', '');
 
-        // Ручной разбор по запятым (как в LoadConfig). DelimitedText без
-        // StrictDelimiter рвал бы строку и по пробелам и спецсимволам кавычек.
-        TempIds := TStringList.Create;
+        // Парсим NodeIds через TStringList (как в LoadConfig)
+        with TStringList.Create do
         try
-          while NodeIdsStr <> '' do
-          begin
-            PosComma := Pos(',', NodeIdsStr);
-            if PosComma > 0 then
-            begin
-              TempIds.Add(Trim(Copy(NodeIdsStr, 1, PosComma - 1)));
-              Delete(NodeIdsStr, 1, PosComma);
-            end
-            else
-            begin
-              TempIds.Add(Trim(NodeIdsStr));
-              NodeIdsStr := '';
-            end;
-          end;
-
-          SetLength(TempConfig.Groups[I].NodeIds, TempIds.Count);
-          for J := 0 to TempIds.Count - 1 do
-            TempConfig.Groups[I].NodeIds[J] := StrToIntDef(TempIds[J], 0);
+          Delimiter := ',';
+          DelimitedText := NodeIdsStr;
+          SetLength(TempConfig.Groups[I].NodeIds, Count);
+          for J := 0 to Count - 1 do
+            TempConfig.Groups[I].NodeIds[J] := StrToIntDef(Strings[J], 0);
         finally
-          TempIds.Free;
+          Free;
         end;
       end;
     finally
       Ini.Free;
     end;
-
+    
     FConfig := TempConfig;
-
+    
     if not ValidateConfig(ErrorMsg) then
     begin
       FConfig := OldConfig;
       Exit;
     end;
-
-    // НЕ пишем на диск: ImportConfig только парсит/валидирует и загружает в FConfig
-    // для предпросмотра. Запись — только по «Применить» (SettingsForm.btnApplyClick).
+    
+    FImportedLanguage := ImportedLanguage;
+    FImportedBalloon := ImportedBalloon;
     Result := True;
   except
     on E: Exception do
@@ -558,28 +541,20 @@ end;
 procedure TConfigManager.ExportConfig(const FileName: string);
 var
   Ini: TIniFile;
-  I, J: integer;
+  I, J: Integer;
   NodeIdsStr: string;
-  Sections: TStringList;
 begin
   Ini := TIniFile.Create(FileName);
   try
-    // Чистим старые секции Node*/Group* — на случай экспорта поверх существующего
-    // файла с большим числом узлов/групп.
-    Sections := TStringList.Create;
-    try
-      Ini.ReadSections(Sections);
-      for I := 0 to Sections.Count - 1 do
-        if (Pos('Node', Sections[I]) = 1) or (Pos('Group', Sections[I]) = 1) then
-          Ini.EraseSection(Sections[I]);
-    finally
-      Sections.Free;
-    end;
-
     Ini.WriteString('General', 'Version', FConfig.Version);
+    Ini.WriteBool('General', 'LoggingEnabled', FConfig.LoggingEnabled);
+    Ini.WriteBool('General', 'ComparePingEnabled', FConfig.ComparePingEnabled);
+    Ini.WriteBool('General', 'CreateSessionReport', FConfig.CreateSessionReport);
+    Ini.WriteString('General', 'Language', GetLanguage);
+    Ini.WriteString('General', 'BalloonHintEnabled', BoolToStrEx(GetBalloonHintEnabled));
     Ini.WriteInteger('General', 'NodeCount', Length(FConfig.Nodes));
     Ini.WriteInteger('General', 'GroupCount', Length(FConfig.Groups));
-
+    
     for I := 0 to High(FConfig.Nodes) do
     begin
       Ini.WriteInteger('Node' + IntToStr(I), 'Id', FConfig.Nodes[I].Id);
@@ -587,26 +562,26 @@ begin
       Ini.WriteString('Node' + IntToStr(I), 'Host', FConfig.Nodes[I].Host);
       Ini.WriteInteger('Node' + IntToStr(I), 'IntervalMs', FConfig.Nodes[I].IntervalMs);
       Ini.WriteInteger('Node' + IntToStr(I), 'TimeoutMs', FConfig.Nodes[I].TimeoutMs);
-      Ini.WriteString('Node' + IntToStr(I), 'State',
-        NodeStateToStr(FConfig.Nodes[I].State));
+      Ini.WriteInteger('Node' + IntToStr(I), 'FailThreshold', FConfig.Nodes[I].FailThreshold);
+      Ini.WriteBool('Node' + IntToStr(I), 'NotificationsMuted', FConfig.Nodes[I].NotificationsMuted);
+      Ini.WriteString('Node' + IntToStr(I), 'State', NodeStateToStr(FConfig.Nodes[I].State));
       Ini.WriteString('Node' + IntToStr(I), 'Command', FConfig.Nodes[I].Command);
+      Ini.WriteString('Node' + IntToStr(I), 'DownCommand', FConfig.Nodes[I].DownCommand);
+      Ini.WriteString('Node' + IntToStr(I), 'UpCommand', FConfig.Nodes[I].UpCommand);
     end;
-
+    
     for I := 0 to High(FConfig.Groups) do
     begin
       Ini.WriteInteger('Group' + IntToStr(I), 'Id', FConfig.Groups[I].Id);
       Ini.WriteString('Group' + IntToStr(I), 'Name', FConfig.Groups[I].Name);
-      Ini.WriteString('Group' + IntToStr(I), 'Type',
-        GroupTypeToStr(FConfig.Groups[I].GroupType));
-
+      Ini.WriteString('Group' + IntToStr(I), 'Type', GroupTypeToStr(FConfig.Groups[I].GroupType));
+      Ini.WriteString('Group' + IntToStr(I), 'Enabled', BoolToStrEx(FConfig.Groups[I].Enabled));
+      
       NodeIdsStr := '';
       for J := 0 to High(FConfig.Groups[I].NodeIds) do
       begin
-        if FConfig.Groups[I].NodeIds[J] > 0 then
-        begin
-          if NodeIdsStr <> '' then NodeIdsStr := NodeIdsStr + ',';
-          NodeIdsStr := NodeIdsStr + IntToStr(FConfig.Groups[I].NodeIds[J]);
-        end;
+        if J > 0 then NodeIdsStr := NodeIdsStr + ',';
+        NodeIdsStr := NodeIdsStr + IntToStr(FConfig.Groups[I].NodeIds[J]);
       end;
       Ini.WriteString('Group' + IntToStr(I), 'NodeIds', NodeIdsStr);
     end;
@@ -619,6 +594,7 @@ function TConfigManager.GetLanguage: string;
 var
   Ini: TIniFile;
 begin
+  if FImportedLanguage <> '' then Exit(FImportedLanguage);
   Result := 'english'; // Default: English
   if not FileExists(FConfigPath) then Exit;
 
@@ -634,21 +610,23 @@ procedure TConfigManager.SetLanguage(const LangCode: string);
 var
   Ini: TIniFile;
 begin
-  if not DirectoryExists(FConfigDir) then
+  if (FConfigDir <> '') and not DirectoryExists(FConfigDir) then
     ForceDirectories(FConfigDir);
 
   Ini := TIniFile.Create(FConfigPath);
   try
     Ini.WriteString('General', 'Language', LangCode);
+    FImportedLanguage := '';
   finally
     Ini.Free;
   end;
 end;
 
-function TConfigManager.GetBalloonHintEnabled: boolean;
+function TConfigManager.GetBalloonHintEnabled: Boolean;
 var
   Ini: TIniFile;
 begin
+  if FImportedBalloon >= 0 then Exit(FImportedBalloon <> 0);
   Result := True; // Default: enabled
   if not FileExists(FConfigPath) then Exit;
 
@@ -660,19 +638,21 @@ begin
   end;
 end;
 
-procedure TConfigManager.SetBalloonHintEnabled(Value: boolean);
+procedure TConfigManager.SetBalloonHintEnabled(Value: Boolean);
 var
   Ini: TIniFile;
 begin
-  if not DirectoryExists(FConfigDir) then
+  if (FConfigDir <> '') and not DirectoryExists(FConfigDir) then
     ForceDirectories(FConfigDir);
 
   Ini := TIniFile.Create(FConfigPath);
   try
     Ini.WriteString('General', 'BalloonHintEnabled', BoolToStrEx(Value));
+    FImportedBalloon := -1;
   finally
     Ini.Free;
   end;
 end;
 
 end.
+

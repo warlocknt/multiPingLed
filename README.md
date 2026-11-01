@@ -293,3 +293,12 @@ When distributing modified versions, source code must be provided and GPLv3 pres
 
 - Developed using Lazarus IDE and Free Pascal
 - Inspired by the need for network infrastructure monitoring
+## История сессий
+
+SQLite встроена в EXE. История хранится в `history.sqlite`, отчёты — в `reports/`, копии повреждённых баз — в `bak/`. Автоматическое создание HTML при выходе включается в общих настройках. Подробности: [SESSION-HISTORY.md](SESSION-HISTORY.md).
+
+Подробности нумерации всех сборок и журнал попыток: [BUILDING.md](BUILDING.md).
+
+## Единственный экземпляр
+
+Повторный запуск в той же сессии Windows показывает предупреждение «Приложение multiPingLED уже запущено» и после нажатия ОК завершается. Работающий экземпляр продолжает мониторинг. Обычная, отладочная и переименованные копии используют один именованный mutex. При аварийном завершении Windows освобождает его автоматически. Язык предупреждения читается из INI без запуска мониторинга, открытия истории или изменения настроек.

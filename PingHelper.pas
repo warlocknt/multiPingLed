@@ -1,4 +1,4 @@
-unit PingHelper;
+﻿unit PingHelper;
 
 {$mode objfpc}{$H+}
 
@@ -9,76 +9,62 @@ uses
 
 type
   TPingResult = record
-    Success: boolean;
-    ResponseTime: integer;
+    Success: Boolean;
+    ResponseTime: Integer;
     ErrorMessage: string;
   end;
 
-function PingHost(const Host: string; TimeoutMs: integer): TPingResult;
+function PingHost(const Host: string; TimeoutMs: Integer): TPingResult;
 
 implementation
+
+uses PingCompare;
 
 // ICMP API из iphlpapi.dll
 const
   IP_STATUS_BASE = 11000;
   IP_SUCCESS = 0;
-  IP_BUF_TOO_SMALL = IP_STATUS_BASE + 1;
   IP_DEST_NET_UNREACHABLE = IP_STATUS_BASE + 2;
   IP_DEST_HOST_UNREACHABLE = IP_STATUS_BASE + 3;
-  IP_DEST_PROT_UNREACHABLE = IP_STATUS_BASE + 4;
-  IP_DEST_PORT_UNREACHABLE = IP_STATUS_BASE + 5;
-  IP_NO_RESOURCES = IP_STATUS_BASE + 6;
-  IP_BAD_OPTION = IP_STATUS_BASE + 7;
-  IP_HW_ERROR = IP_STATUS_BASE + 8;
-  IP_PACKET_TOO_BIG = IP_STATUS_BASE + 9;
   IP_REQ_TIMED_OUT = IP_STATUS_BASE + 10;
-  IP_BAD_REQ = IP_STATUS_BASE + 11;
-  IP_BAD_ROUTE = IP_STATUS_BASE + 12;
-  IP_TTL_EXPIRED_TRANSIT = IP_STATUS_BASE + 13;
-  IP_TTL_EXPIRED_REASSEM = IP_STATUS_BASE + 14;
-  IP_PARAM_PROBLEM = IP_STATUS_BASE + 15;
-  IP_SOURCE_QUENCH = IP_STATUS_BASE + 16;
-  IP_OPTION_TOO_BIG = IP_STATUS_BASE + 17;
-  IP_BAD_DESTINATION = IP_STATUS_BASE + 18;
 
 type
+  TPingPayload = array[0..31] of Byte;
   PICMP_ECHO_REPLY = ^TICMP_ECHO_REPLY;
-
   TICMP_ECHO_REPLY = record
     Address: DWORD;
     Status: DWORD;
     RoundTripTime: DWORD;
-    DataSize: word;
-    Reserved: word;
+    DataSize: WORD;
+    Reserved: WORD;
     Data: Pointer;
     Options: record
-      Ttl: byte;
-      Tos: byte;
-      Flags: byte;
-      OptionsSize: byte;
+      Ttl: BYTE;
+      Tos: BYTE;
+      Flags: BYTE;
+      OptionsSize: BYTE;
       OptionsData: Pointer;
-      end;
+    end;
   end;
 
-  TIpOptionInformation = record
-    Ttl: byte;
-    Tos: byte;
-    Flags: byte;
-    OptionsSize: byte;
-    OptionsData: pchar;
-  end;
 
 var
-  WSAInitialized: boolean = False;
+  WSAInitialized: Boolean = False;
   WSAData: TWSAData;
 
 // Импортируем функции из iphlpapi.dll
 function IcmpCreateFile: THandle; stdcall; external 'iphlpapi.dll';
 function IcmpCloseHandle(IcmpHandle: THandle): BOOL; stdcall; external 'iphlpapi.dll';
-function IcmpSendEcho(IcmpHandle: THandle; DestinationAddress: DWORD;
-  RequestData: Pointer; RequestSize: word; RequestOptions: Pointer;
-  ReplyBuffer: Pointer; ReplySize: DWORD; Timeout: DWORD): DWORD;
-  stdcall; external 'iphlpapi.dll';
+function IcmpSendEcho(
+  IcmpHandle: THandle;
+  DestinationAddress: DWORD;
+  RequestData: Pointer;
+  RequestSize: WORD;
+  RequestOptions: Pointer;
+  ReplyBuffer: Pointer;
+  ReplySize: DWORD;
+  Timeout: DWORD
+): DWORD; stdcall; external 'iphlpapi.dll';
 
 function GetHostIP(const Host: string): DWORD;
 var
@@ -103,28 +89,36 @@ begin
   end;
 end;
 
-function PingHost(const Host: string; TimeoutMs: integer): TPingResult;
+function PingHost(const Host: string; TimeoutMs: Integer): TPingResult;
 var
   ReplySize: DWORD;
   ReplyBuffer: Pointer;
   IPAddr: DWORD;
   PingResult: DWORD;
   pEchoReply: PICMP_ECHO_REPLY;
-  LocalIcmp: THandle;
+  hIcmp: THandle;
+  Comparison: TPingComparison;
+  AddressText: string;
+  RequestData: TPingPayload;
 begin
   Result.Success := False;
   Result.ResponseTime := -1;
   Result.ErrorMessage := '';
 
-  // Собственный ICMP-хэндл на каждый вызов: общий глобальный хэндл не
-  // потокобезопасен при одновременных IcmpSendEcho из разных потоков пинга.
-  LocalIcmp := IcmpCreateFile;
-  if LocalIcmp = INVALID_HANDLE_VALUE then
+  if TimeoutMs <= 0 then
+  begin
+    Result.ErrorMessage := 'Invalid timeout';
+    Exit;
+  end;
+  hIcmp := IcmpCreateFile;
+  if hIcmp = INVALID_HANDLE_VALUE then
   begin
     Result.ErrorMessage := 'Failed to create ICMP handle';
     Exit;
   end;
 
+  ReplyBuffer := nil;
+  Comparison := nil;
   try
     // Получаем IP адрес хоста
     IPAddr := GetHostIP(Host);
@@ -134,54 +128,74 @@ begin
       Exit;
     end;
 
+    if ComparisonEnabled then
+    begin
+      AddressText := Format('%d.%d.%d.%d', [IPAddr and $FF,
+        (IPAddr shr 8) and $FF, (IPAddr shr 16) and $FF, IPAddr shr 24]);
+      try
+        Comparison := TPingComparison.Create(Host, AddressText, TimeoutMs);
+      except
+        // A diagnostic launch failure must not prevent the ICMP probe.
+      end;
+    end;
+
     // Размер буфера для ответа
-    ReplySize := SizeOf(TICMP_ECHO_REPLY) + 32;
+    RequestData := Default(TPingPayload);
+    FillChar(RequestData, SizeOf(RequestData), Ord('a'));
+    ReplySize := SizeOf(TICMP_ECHO_REPLY) + SizeOf(RequestData) + 8;
     GetMem(ReplyBuffer, ReplySize);
+    // Отправляем ICMP echo request
+    PingResult := IcmpSendEcho(
+      hIcmp,
+      IPAddr,
+      @RequestData[0], SizeOf(RequestData), // 32 bytes of echo data
+      nil,              // Опции по умолчанию
+      ReplyBuffer,
+      ReplySize,
+      TimeoutMs
+    );
 
-    try
-      // Отправляем ICMP echo request
-      PingResult := IcmpSendEcho(LocalIcmp, IPAddr,
-        nil, 0,           // Нет данных
-        nil,              // Опции по умолчанию
-        ReplyBuffer, ReplySize, TimeoutMs);
-
-      if PingResult = 0 then
+    if PingResult = 0 then
+    begin
+      // Ошибка
+      PingResult := GetLastError;
+      case PingResult of
+        IP_REQ_TIMED_OUT: Result.ErrorMessage := 'Request timed out';
+        IP_DEST_HOST_UNREACHABLE: Result.ErrorMessage := 'Host unreachable';
+        IP_DEST_NET_UNREACHABLE: Result.ErrorMessage := 'Network unreachable';
+        else Result.ErrorMessage := 'Ping failed: ' + IntToStr(PingResult);
+      end;
+    end
+    else
+    begin
+      // Успех
+      pEchoReply := PICMP_ECHO_REPLY(ReplyBuffer);
+      if pEchoReply^.Status = IP_SUCCESS then
       begin
-        // Ошибка
-        PingResult := GetLastError;
-        case PingResult of
-          IP_REQ_TIMED_OUT: Result.ErrorMessage := 'Request timed out';
-          IP_DEST_HOST_UNREACHABLE: Result.ErrorMessage := 'Host unreachable';
-          IP_DEST_NET_UNREACHABLE: Result.ErrorMessage := 'Network unreachable';
-          else
-            Result.ErrorMessage := 'Ping failed: ' + IntToStr(PingResult);
-        end;
+        Result.Success := True;
+        Result.ResponseTime := pEchoReply^.RoundTripTime;
       end
       else
       begin
-        // Успех
-        pEchoReply := PICMP_ECHO_REPLY(ReplyBuffer);
-        if pEchoReply^.Status = IP_SUCCESS then
-        begin
-          Result.Success := True;
-          Result.ResponseTime := pEchoReply^.RoundTripTime;
-        end
-        else
-        begin
-          Result.ErrorMessage := 'Ping status: ' + IntToStr(pEchoReply^.Status);
-        end;
+        Result.ErrorMessage := 'Ping status: ' + IntToStr(pEchoReply^.Status);
       end;
-
-    finally
-      FreeMem(ReplyBuffer);
     end;
+
   finally
-    IcmpCloseHandle(LocalIcmp);
+    if ReplyBuffer <> nil then FreeMem(ReplyBuffer);
+    IcmpCloseHandle(hIcmp);
+    if Comparison <> nil then
+    begin
+      try
+        Comparison.Finish(Result.Success, Result.ResponseTime, Result.ErrorMessage);
+      finally Comparison.Free; end;
+    end;
   end;
 end;
 
 initialization
-  // WSAStartup для резолва имён можно инициализировать глобально один раз.
+  // Инициализируем один раз до старта потоков — исключает гонку между потоками
+  WSAData := Default(TWSAData);
   if WSAStartup($0202, WSAData) = 0 then
     WSAInitialized := True;
 

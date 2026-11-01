@@ -5,12 +5,13 @@ unit NodeManager;
 interface
 
 uses
-  Classes, SysUtils, ConfigManager, PingHelper;
+  Classes, SysUtils, ConfigManager, PingHelper, SyncObjs, CommandRunner, SessionHistory;
 
 type
-  TIntArray = array of integer;
+  TIntArray = array of Integer;
   TNodeArray = array of TNodeConfig;
 
+  TPingFunction = function(const Host: string; TimeoutMs: Integer): TPingResult;
   TPingThread = class;
 
   { TNodeManager }
@@ -21,137 +22,128 @@ type
     FPingThreads: TFPList;
     FCriticalSection: TRTLCriticalSection;
     FOnStateChange: TNotifyEvent;
-    FModified: boolean;
-    // Были ли изменения по сравнению с предыдущей конфигурацией
-    procedure DoStateChange;
-    function FindThreadIndexByNodeId(Id: integer): integer;
+    FEventSection: TRTLCriticalSection;
+    FPingFunction: TPingFunction;
+    FCommands: TCommandRunner;
+    FHistory: TSessionHistory;
+    procedure SetOnStateChange(Value: TNotifyEvent);
+    function GetOnStateChange: TNotifyEvent;
+    function FindThreadIndexByNodeId(Id: Integer): Integer;
   public
+    procedure SetHistory(History: TSessionHistory);
     procedure StopAllThreads;
-    constructor Create;
+    constructor Create(APingFunction: TPingFunction = nil);
     destructor Destroy; override;
-    procedure ApplyConfig(const Nodes: TNodeArray; ActiveIds: TIntArray);
+    procedure ApplyConfig(const Nodes: TNodeArray; ActiveIds:TIntArray);
     function GetNodes: TNodeArray;
-    function GetNodeById(Id: integer): TNodeConfig;
-    function IdInArray(Id: integer; const Arr: TIntArray): boolean;
-    procedure StartThreadInternal(Index: integer);
-    procedure UpdateNodeState(Id: integer; NewState: TNodeState);
-    procedure UpdateNodePingTime(Id: integer; PingTime: TDateTime; PingMs: integer);
-    procedure ExecuteNodeCommand(const Node: TNodeConfig; const GroupName: string);
+    function GetNodeById(Id: Integer): TNodeConfig;
+    function IdInArray(Id: Integer; const Arr: TIntArray): Boolean;
+    procedure StartThreadInternal(Index: Integer);
+    procedure RecordProbeResult(Id: Integer; Success: Boolean; PingTime: TDateTime; PingMs: Integer);
+    procedure UpdateNodeState(Id: Integer; NewState: TNodeState);
+    procedure UpdateNodeResult(Id: Integer; NewState: TNodeState; PingTime: TDateTime; PingMs: Integer);
+    function ActiveThreadCount: Integer;
+    procedure UpdateNodePingTime(Id: Integer; PingTime: TDateTime; PingMs: Integer);
+    procedure ExecuteNodeCommand(const Node: TNodeConfig; const GroupName: string); virtual;
     procedure MarkModified;
-    property OnStateChange: TNotifyEvent read FOnStateChange write FOnStateChange;
+    property OnStateChange: TNotifyEvent read GetOnStateChange write SetOnStateChange;
   end;
-
+  
   TPingThread = class(TThread)
   private
     FNodeManager: TNodeManager;
-    FNodeId: integer;
+    FNodeId: Integer;
     FHost: string;
-    FIntervalMs: integer;
-    FTimeoutMs: integer;
+    FIntervalMs: Integer;
+    FTimeoutMs: Integer;
+    FWakeEvent: TEvent;
     procedure DoPing;
+
   protected
     procedure Execute; override;
   public
     constructor Create(ANodeManager: TNodeManager; const NodeInfo: TNodeConfig);
+    destructor Destroy; override;
+    procedure RequestStop;
   end;
 
 implementation
 
-uses Windows, Process, LCLIntf;
+uses LogWriter, Windows;
 
 procedure NodeDebugLog(const Msg: string);
 begin
-  OutputDebugString(PChar('multiPingLed[NodeMgr]: ' + Msg));
+  ApplicationLog('multiPingLed[NodeMgr]: ' + Msg);
 end;
 
-constructor TNodeManager.Create;
+constructor TNodeManager.Create(APingFunction: TPingFunction);
 begin
   inherited Create;
   FPingThreads := TFPList.Create;
   InitCriticalSection(FCriticalSection);
+  InitCriticalSection(FEventSection);
+  FPingFunction := APingFunction;
+  if not Assigned(FPingFunction) then FPingFunction := @PingHost;
+  FCommands := TCommandRunner.Create;
   SetLength(FNodes, 0);
-  FModified := True;
-  // При первом запуске - всегда изменения
 end;
 
 destructor TNodeManager.Destroy;
 begin
   // StopAllThreads сам возьмёт критическую секцию
+  OnStateChange := nil;
+  SetHistory(nil);
   StopAllThreads;
+  FreeAndNil(FCommands);
   FPingThreads.Free;
+  DoneCriticalSection(FEventSection);
   DoneCriticalsection(FCriticalSection);
   inherited Destroy;
 end;
 
-procedure TNodeManager.StopAllThreads;
-var
-  I: integer;
-  Thread: TPingThread;
-  ThreadsCopy: array of TPingThread;
-  MaxTimeout, WaitBudget: integer;
-  Deadline: QWord;
-  AllFinished: boolean;
+procedure TNodeManager.SetHistory(History: TSessionHistory);
 begin
-  // Посылаем сигнал завершения всем потокам под блокировкой, одновременно
-  // копируем указатели для ожидания без CS и сразу очищаем список.
+  EnterCriticalSection(FEventSection);
+  try FHistory := History;
+  finally LeaveCriticalSection(FEventSection); end;
+end;
+
+procedure TNodeManager.StopAllThreads;
+var Threads: array of TPingThread; I: Integer;
+begin
+  Threads := nil;
   EnterCriticalSection(FCriticalSection);
   try
-    SetLength(ThreadsCopy, FPingThreads.Count);
-    MaxTimeout := 0;
-    for I := 0 to FPingThreads.Count - 1 do
+    SetLength(Threads, FPingThreads.Count);
+    for I := 0 to High(Threads) do
     begin
-      Thread := TPingThread(FPingThreads[I]);
-      Thread.Terminate;
-      ThreadsCopy[I] := Thread;
-      if Thread.FTimeoutMs > MaxTimeout then
-        MaxTimeout := Thread.FTimeoutMs;
+      Threads[I] := TPingThread(FPingThreads[I]);
+      Threads[I].RequestStop;
     end;
-    FPingThreads.Clear;
-    // владение потоками теперь через ThreadsCopy
   finally
     LeaveCriticalSection(FCriticalSection);
   end;
-
-  // Ждём ВСЕ потоки параллельно по общему дедлайну. После #4 (свой ICMP-хэндл
-  // с таймаутом) и #7 (дробный Sleep) поток замечает Terminate максимум за
-  // ~TimeoutMs + один шаг сна. Бюджет согласован с реальным TimeoutMs пинга.
-  WaitBudget := MaxTimeout + 2000;
-  if WaitBudget < 4000 then WaitBudget := 4000;
-  Deadline := GetTickCount64 + WaitBudget;
-  repeat
-    AllFinished := True;
-    for I := 0 to High(ThreadsCopy) do
-      if not ThreadsCopy[I].Finished then
-      begin
-        AllFinished := False;
-        Break;
-      end;
-    if AllFinished then Break;
-    Sleep(50);
-  until GetTickCount64 >= Deadline;
-
-  // Освобождаем потоки. TOCTOU закрыт: НЕ полагаемся на гонку FreeOnTerminate —
-  // для незавершившегося (крайне маловероятно при таймауте < дедлайна) делаем
-  // блокирующий WaitFor, чтобы гарантировать: после выхода ни один поток не
-  // обратится к уже разрушенной критической секции.
-  for I := 0 to High(ThreadsCopy) do
+  // Called by the owner; workers never synchronize with the GUI.
+  for I := 0 to High(Threads) do
   begin
-    Thread := ThreadsCopy[I];
-    if Thread = nil then Continue;
-    if not Thread.Finished then
-      Thread.WaitFor;
-    Thread.Free;
+    Threads[I].WaitFor;
+    Threads[I].Free;
+  end;
+  EnterCriticalSection(FCriticalSection);
+  try
+    FPingThreads.Clear;
+  finally
+    LeaveCriticalSection(FCriticalSection);
   end;
 end;
 
-function TNodeManager.FindThreadIndexByNodeId(Id: integer): integer;
+function TNodeManager.FindThreadIndexByNodeId(Id: Integer): Integer;
 var
-  I: integer;
+  I: Integer;
   Thread: TPingThread;
 begin
   Result := -1;
   // Вызывается ТОЛЬКО из ApplyConfig, который уже захватил FCriticalSection
-  // Не пытаемся захватить повторно — будет deadlock
   for I := 0 to FPingThreads.Count - 1 do
   begin
     Thread := TPingThread(FPingThreads[I]);
@@ -165,161 +157,101 @@ end;
 
 procedure TNodeManager.ApplyConfig(const Nodes: TNodeArray; ActiveIds: TIntArray);
 var
-  I, J, ActiveCount: integer;
-  OldNodes: TNodeArray;
-  ConfigChanged: boolean;
-  ThreadIdx: integer;
+  Stopping: array of TPingThread;
+  NewNodes: TNodeArray;
   Thread: TPingThread;
-  NewActiveIds: TIntArray;
-  OldActiveIds: TIntArray;
-  IdStillActive: boolean;
-  IdNewlyActive: boolean;
-  NodeStillExists: boolean;
+  I, J: Integer;
+  Keep: Boolean;
 begin
-  // Собираем старые активные ID
-  OldActiveIds := nil;
-  SetLength(OldActiveIds, 0);
+  // ApplyConfig/StopAllThreads are serialized by the owning main thread.
+  Stopping := nil;
+  NewNodes := Copy(Nodes, 0, Length(Nodes));
   EnterCriticalSection(FCriticalSection);
   try
-    OldNodes := FNodes;
-    for I := 0 to High(FNodes) do
-      if IdInArray(FNodes[I].Id, ActiveIds) then
-      begin
-        SetLength(OldActiveIds, Length(OldActiveIds) + 1);
-        OldActiveIds[High(OldActiveIds)] := FNodes[I].Id;
-      end;
-  finally
-    LeaveCriticalSection(FCriticalSection);
-  end;
-  NewActiveIds := ActiveIds;
-
-  // Проверяем, изменилась ли конфигурация
-  ConfigChanged := FModified;
-  if not ConfigChanged then
-  begin
-    // Сравниваем массивы узлов
-    if Length(Nodes) <> Length(OldNodes) then
-      ConfigChanged := True
-    else
-    begin
-      for I := 0 to High(Nodes) do
-      begin
-        if (Nodes[I].Id <> OldNodes[I].Id) or (Nodes[I].Host <>
-          OldNodes[I].Host) or (Nodes[I].IntervalMs <> OldNodes[I].IntervalMs) or
-          (Nodes[I].TimeoutMs <> OldNodes[I].TimeoutMs) then
-        begin
-          ConfigChanged := True;
-          Break;
-        end;
-      end;
-    end;
-    // Сравниваем активные ID
-    if not ConfigChanged and (Length(NewActiveIds) <> Length(OldActiveIds)) then
-      ConfigChanged := True;
-  end;
-
-  if not ConfigChanged then
-  begin
-    // Существенные для потоков поля (Id/Host/Interval/Timeout/активность) не
-    // изменились, но Name/Command могли поменяться. Обновляем FNodes, чтобы
-    // GetNodeById/ExecuteNodeCommand работали с актуальными данными. Перезапуск
-    // потоков при этом не нужен.
-    EnterCriticalSection(FCriticalSection);
-    try
-      FNodes := Nodes;
-    finally
-      LeaveCriticalSection(FCriticalSection);
-    end;
-    FModified := False;
-    Exit;
-  end;
-
-  // Перезапускаем только изменённые/новые потоки
-  EnterCriticalSection(FCriticalSection);
-  try
-    FNodes := Nodes;
-    ActiveCount := 0;
-
-    // Останавливаем потоки для узлов, полностью удалённых из конфига.
-    // Основной цикл ниже проходит только по новым FNodes и такие «сиротские»
-    // потоки не увидел бы — они работали бы вхолостую до выхода из приложения.
     for I := FPingThreads.Count - 1 downto 0 do
     begin
       Thread := TPingThread(FPingThreads[I]);
-      NodeStillExists := False;
-      for J := 0 to High(FNodes) do
-        if FNodes[J].Id = Thread.FNodeId then
+      Keep := False;
+      for J := 0 to High(NewNodes) do
+        if (NewNodes[J].Id = Thread.FNodeId) and IdInArray(Thread.FNodeId, ActiveIds) then
         begin
-          NodeStillExists := True;
+          Keep := (Thread.FHost = NewNodes[J].Host) and
+            (Thread.FIntervalMs = NewNodes[J].IntervalMs) and
+            (Thread.FTimeoutMs = NewNodes[J].TimeoutMs) and not Thread.Finished;
           Break;
         end;
-      if not NodeStillExists then
+      if not Keep then
       begin
-        NodeDebugLog('Stopping orphan thread for removed node ' +
-          IntToStr(Thread.FNodeId));
-        Thread.FreeOnTerminate := True;
-        // освободит себя сам после завершения Execute
-        Thread.Terminate;
+        Thread.RequestStop;
+        SetLength(Stopping, Length(Stopping) + 1);
+        Stopping[High(Stopping)] := Thread;
         FPingThreads.Delete(I);
       end;
     end;
-
-    for I := 0 to High(FNodes) do
-    begin
-      IdStillActive := IdInArray(FNodes[I].Id, NewActiveIds);
-      IdNewlyActive := IdInArray(FNodes[I].Id, NewActiveIds) and not
-        IdInArray(FNodes[I].Id, OldActiveIds);
-
-      ThreadIdx := FindThreadIndexByNodeId(FNodes[I].Id);
-
-      if IdNewlyActive then
-      begin
-        // Узел стал активным - запускаем поток
-        NodeDebugLog('Starting new thread for node ' + IntToStr(FNodes[I].Id));
-        StartThreadInternal(I);
-        Inc(ActiveCount);
-      end
-      else if IdStillActive and (ThreadIdx < 0) then
-      begin
-        // Поток отсутствует, но должен быть - запускаем
-        NodeDebugLog('Recreating thread for node ' + IntToStr(FNodes[I].Id));
-        StartThreadInternal(I);
-        Inc(ActiveCount);
-      end
-      else if not IdStillActive and (ThreadIdx >= 0) then
-      begin
-        // Узел стал неактивным - останавливаем поток
-        NodeDebugLog('Stopping thread for node ' + IntToStr(FNodes[I].Id));
-        Thread := TPingThread(FPingThreads[ThreadIdx]);
-        Thread.FreeOnTerminate := True;
-        // освободит себя сам после завершения Execute
-        Thread.Terminate;
-        FPingThreads.Delete(ThreadIdx);
-      end;
-    end;
-
-    NodeDebugLog('ApplyConfig completed, active threads: ' +
-      IntToStr(FPingThreads.Count));
   finally
     LeaveCriticalSection(FCriticalSection);
   end;
-
-  FModified := False;
+  // Retain ownership of removed workers until they actually exit.
+  for I := 0 to High(Stopping) do
+  begin
+    Stopping[I].WaitFor;
+    Stopping[I].Free;
+  end;
+  EnterCriticalSection(FEventSection);
+  try
+    EnterCriticalSection(FCriticalSection);
+    try
+      for I := 0 to High(NewNodes) do
+      begin
+        NewNodes[I].State := nsUnknown;
+        NewNodes[I].LastPingTime := 0;
+        NewNodes[I].LastPingMs := -1;
+        NewNodes[I].LastStateChange := 0;
+        NewNodes[I].ConsecutiveFailures := 0;
+        NewNodes[I].ProbeCount := 0;
+        NewNodes[I].ProbeIndex := 0;
+        NewNodes[I].ProbeLosses := 0;
+        FillChar(NewNodes[I].ProbeHistory, SizeOf(NewNodes[I].ProbeHistory), 0);
+        for J := 0 to High(FNodes) do
+          if (NewNodes[I].Id = FNodes[J].Id) and (NewNodes[I].Host = FNodes[J].Host) then
+          begin
+            NewNodes[I].State := FNodes[J].State;
+            NewNodes[I].LastPingTime := FNodes[J].LastPingTime;
+            NewNodes[I].LastPingMs := FNodes[J].LastPingMs;
+            NewNodes[I].LastStateChange := FNodes[J].LastStateChange;
+            NewNodes[I].ConsecutiveFailures := FNodes[J].ConsecutiveFailures;
+            NewNodes[I].ProbeCount := FNodes[J].ProbeCount;
+            NewNodes[I].ProbeIndex := FNodes[J].ProbeIndex;
+            NewNodes[I].ProbeLosses := FNodes[J].ProbeLosses;
+            NewNodes[I].ProbeHistory := FNodes[J].ProbeHistory;
+            Break;
+          end;
+      end;
+      FNodes := NewNodes;
+      for I := 0 to High(FNodes) do
+        if IdInArray(FNodes[I].Id, ActiveIds) and
+          (FindThreadIndexByNodeId(FNodes[I].Id) < 0) then StartThreadInternal(I);
+    finally
+      LeaveCriticalSection(FCriticalSection);
+    end;
+  finally
+    LeaveCriticalSection(FEventSection);
+  end;
 end;
 
 function TNodeManager.GetNodes: TNodeArray;
 begin
   EnterCriticalSection(FCriticalSection);
   try
-    Result := FNodes;
+    Result := Copy(FNodes, 0, Length(FNodes));
   finally
     LeaveCriticalSection(FCriticalSection);
   end;
 end;
 
-function TNodeManager.GetNodeById(Id: integer): TNodeConfig;
+function TNodeManager.GetNodeById(Id: Integer): TNodeConfig;
 var
-  I: integer;
+  I: Integer;
 begin
   EnterCriticalSection(FCriticalSection);
   try
@@ -332,7 +264,6 @@ begin
       end;
     end;
     Result := Default(TNodeConfig);
-    // запись содержит managed-поля — не FillChar
   finally
     LeaveCriticalSection(FCriticalSection);
   end;
@@ -340,12 +271,12 @@ end;
 
 procedure TNodeManager.MarkModified;
 begin
-  FModified := True;
+  // ApplyConfig always reconciles worker parameters and active IDs.
 end;
 
-function TNodeManager.IdInArray(Id: integer; const Arr: TIntArray): boolean;
+function TNodeManager.IdInArray(Id: Integer; const Arr: TIntArray): Boolean;
 var
-  I: integer;
+  I: Integer;
 begin
   Result := False;
   for I := 0 to High(Arr) do
@@ -353,52 +284,107 @@ begin
       Exit(True);
 end;
 
-procedure TNodeManager.StartThreadInternal(Index: integer);
-var
-  Thread: TPingThread;
+procedure TNodeManager.StartThreadInternal(Index: Integer);
+var Thread: TPingThread;
 begin
   if (Index < 0) or (Index > High(FNodes)) then Exit;
-
   Thread := TPingThread.Create(Self, FNodes[Index]);
-  Thread.Start;
-  // Вызывается только пока FCriticalSection захвачена вызывающим кодом
-  FPingThreads.Add(Thread);
-end;
-
-procedure TNodeManager.UpdateNodeState(Id: integer; NewState: TNodeState);
-var
-  I: integer;
-  StateChanged: boolean;
-begin
-  StateChanged := False;
-
-  EnterCriticalSection(FCriticalSection);
   try
-    for I := 0 to High(FNodes) do
-    begin
-      if FNodes[I].Id = Id then
-      begin
-        FNodes[I].LastPingTime := Now;  // Обновляем время пинга
-        if FNodes[I].State <> NewState then
-        begin
-          FNodes[I].State := NewState;
-          StateChanged := True;
-        end;
-        Break;
-      end;
-    end;
-  finally
-    LeaveCriticalSection(FCriticalSection);
+    FPingThreads.Add(Thread);
+    Thread.Start;
+  except
+    FPingThreads.Remove(Thread);
+    Thread.Free;
+    raise;
   end;
-
-  if StateChanged then
-    DoStateChange;
 end;
 
-procedure TNodeManager.UpdateNodePingTime(Id: integer; PingTime: TDateTime;
-  PingMs: integer);
+procedure TNodeManager.RecordProbeResult(Id: Integer; Success: Boolean;
+  PingTime: TDateTime; PingMs: Integer);
+var I, Threshold: Integer; ConfirmedState: TNodeState; Found: Boolean;
+begin
+  EnterCriticalSection(FEventSection);
+  try
+    Found := False;
+    ConfirmedState := nsUnknown;
+    EnterCriticalSection(FCriticalSection);
+    try
+      for I := 0 to High(FNodes) do
+        if FNodes[I].Id = Id then
+        begin
+          Found := True;
+          with FNodes[I] do
+          begin
+            if ProbeCount = Length(ProbeHistory) then
+            begin
+              if ProbeHistory[ProbeIndex] then Dec(ProbeLosses);
+            end
+            else Inc(ProbeCount);
+            ProbeHistory[ProbeIndex] := not Success;
+            if not Success then Inc(ProbeLosses);
+            ProbeIndex := (ProbeIndex + 1) mod Length(ProbeHistory);
+            Threshold := FailThreshold;
+            if Threshold <= 0 then Threshold := 3;
+            if Success then
+            begin
+              ConsecutiveFailures := 0;
+              ConfirmedState := nsUp;
+            end
+            else
+            begin
+              if ConsecutiveFailures < 20 then Inc(ConsecutiveFailures);
+              ConfirmedState := FNodes[I].State;
+              if ConsecutiveFailures >= Threshold then ConfirmedState := nsDown;
+            end;
+          end;
+          Break;
+        end;
+    finally LeaveCriticalSection(FCriticalSection); end;
+    if Found then
+    begin
+      UpdateNodeResult(Id, ConfirmedState, PingTime, PingMs);
+      if FHistory <> nil then FHistory.RecordProbe(GetNodeById(Id), Success, PingTime, PingMs);
+    end;
+  finally LeaveCriticalSection(FEventSection); end;
+end;
+
+procedure TNodeManager.UpdateNodeState(Id: Integer; NewState: TNodeState);
+begin
+  UpdateNodeResult(Id, NewState, Now, -1);
+end;
+
+procedure TNodeManager.UpdateNodeResult(Id: Integer; NewState: TNodeState;
+  PingTime: TDateTime; PingMs: Integer);
+var I: Integer; Changed: Boolean;
+begin
+  // Serialize transitions and callbacks, including subscriber detachment.
+  EnterCriticalSection(FEventSection);
+  try
+    Changed := False;
+    EnterCriticalSection(FCriticalSection);
+    try
+      for I := 0 to High(FNodes) do
+        if FNodes[I].Id = Id then
+        begin
+          Changed := FNodes[I].State <> NewState;
+          if Changed then FNodes[I].LastStateChange := PingTime;
+          FNodes[I].State := NewState;
+          FNodes[I].LastPingTime := PingTime;
+          FNodes[I].LastPingMs := PingMs;
+          Break;
+        end;
+    finally
+      LeaveCriticalSection(FCriticalSection);
+    end;
+    if Changed and Assigned(FOnStateChange) then FOnStateChange(Self);
+  finally
+    LeaveCriticalSection(FEventSection);
+  end;
+end;
+
+procedure TNodeManager.UpdateNodePingTime(Id: Integer; PingTime: TDateTime; PingMs: Integer);
 var
-  I: integer;
+  I: Integer;
 begin
   EnterCriticalSection(FCriticalSection);
   try
@@ -416,121 +402,40 @@ begin
   end;
 end;
 
-procedure TNodeManager.ExecuteNodeCommand(const Node: TNodeConfig;
-  const GroupName: string);
-var
-  FullCmd, Cmd, Params, Ext: string;
-  Process: TProcess;
-  StatusStr: string;
-  SpacePos, QuoteEnd: integer;
+procedure TNodeManager.ExecuteNodeCommand(const Node: TNodeConfig; const GroupName: string);
 begin
-  if Trim(Node.Command) = '' then Exit;
+  FCommands.Enqueue(Node, GroupName);
+end;
 
-  FullCmd := Trim(Node.Command);
-
-  // Подставляем макросы
-  case Node.State of
-    nsUp: StatusStr := 'up';
-    nsDown: StatusStr := 'down';
-    else
-      StatusStr := 'unknown';
-  end;
-
-  FullCmd := StringReplace(FullCmd, '{host}', Node.Host, [rfReplaceAll, rfIgnoreCase]);
-  FullCmd := StringReplace(FullCmd, '{name}', Node.Name, [rfReplaceAll, rfIgnoreCase]);
-  FullCmd := StringReplace(FullCmd, '{status}', StatusStr, [rfReplaceAll, rfIgnoreCase]);
-  FullCmd := StringReplace(FullCmd, '{group}', GroupName, [rfReplaceAll, rfIgnoreCase]);
-  FullCmd := StringReplace(FullCmd, '{ping}', IntToStr(Node.LastPingMs),
-    [rfReplaceAll, rfIgnoreCase]);
-
-  // Разделяем на исполняемый файл и параметры.
-  // Если путь в кавычках ("C:\Program Files\app.exe" arg1) — берём его целиком
-  // до закрывающей кавычки; иначе делим по первому пробелу.
-  if (Length(FullCmd) > 0) and (FullCmd[1] = '"') then
-  begin
-    QuoteEnd := Pos('"', FullCmd, 2);
-    // 3-арг System.Pos: поиск с позиции 2
-    if QuoteEnd > 0 then
-    begin
-      Cmd := Copy(FullCmd, 2, QuoteEnd - 2);
-      Params := Trim(Copy(FullCmd, QuoteEnd + 1, Length(FullCmd)));
-    end
-    else
-    begin
-      // Нет закрывающей кавычки — считаем всё (без кавычки) путём
-      Cmd := Copy(FullCmd, 2, Length(FullCmd));
-      Params := '';
-    end;
-  end
-  else
-  begin
-    SpacePos := Pos(' ', FullCmd);
-    if SpacePos > 0 then
-    begin
-      Cmd := Trim(Copy(FullCmd, 1, SpacePos - 1));
-      Params := Trim(Copy(FullCmd, SpacePos + 1, Length(FullCmd)));
-    end
-    else
-    begin
-      Cmd := FullCmd;
-      Params := '';
-    end;
-  end;
-
-  // Определяем тип файла
-  Ext := LowerCase(ExtractFileExt(Cmd));
-
-  Process := TProcess.Create(nil);
+procedure TNodeManager.SetOnStateChange(Value: TNotifyEvent);
+begin
+  EnterCriticalSection(FEventSection);
   try
-    Process.Options := [poWaitOnExit];
-    Process.ShowWindow := swoHide;
-
-    if Ext = '.ps1' then
-    begin
-      // PowerShell
-      Process.Executable := 'powershell.exe';
-      Process.Parameters.Add('-NoProfile');
-      Process.Parameters.Add('-ExecutionPolicy');
-      Process.Parameters.Add('Bypass');
-      Process.Parameters.Add('-File');
-      Process.Parameters.Add('"' + Cmd + '"');
-      if Params <> '' then
-        Process.Parameters.Add(Params);
-    end
-    else if (Ext = '.cmd') or (Ext = '.bat') then
-    begin
-      // Batch
-      Process.Executable := 'cmd.exe';
-      Process.Parameters.Add('/C');
-      Process.Parameters.Add('"' + Cmd + '"');
-      if Params <> '' then
-        Process.Parameters.Add(Params);
-    end
-    else
-    begin
-      // exe или другой
-      Process.Executable := Cmd;
-      if Params <> '' then
-        Process.Parameters.Add(Params);
-    end;
-
-    NodeDebugLog('Executing: ' + Process.Executable + ' ' + Params);
-    try
-      Process.Execute;
-      NodeDebugLog('Command exited with code: ' + IntToStr(Process.ExitStatus));
-    except
-      on E: Exception do
-        NodeDebugLog('Command execution failed: ' + E.Message);
-    end;
+    FOnStateChange := Value;
+    if Assigned(FOnStateChange) then FOnStateChange(Self);
   finally
-    Process.Free;
+    LeaveCriticalSection(FEventSection);
   end;
 end;
 
-procedure TNodeManager.DoStateChange;
+function TNodeManager.GetOnStateChange: TNotifyEvent;
 begin
-  if Assigned(FOnStateChange) then
-    FOnStateChange(Self);
+  EnterCriticalSection(FEventSection);
+  try
+    Result := FOnStateChange;
+  finally
+    LeaveCriticalSection(FEventSection);
+  end;
+end;
+
+function TNodeManager.ActiveThreadCount: Integer;
+begin
+  EnterCriticalSection(FCriticalSection);
+  try
+    Result := FPingThreads.Count;
+  finally
+    LeaveCriticalSection(FCriticalSection);
+  end;
 end;
 
 { TPingThread }
@@ -544,13 +449,26 @@ begin
   FIntervalMs := NodeInfo.IntervalMs;
   FTimeoutMs := NodeInfo.TimeoutMs;
   FreeOnTerminate := False;
-  // OnTerminate-обработчик не назначаем: все пути остановки потока (StopAllThreads,
-  // ApplyConfig) сами удаляют поток из FPingThreads и освобождают его.
+  FWakeEvent := TEvent.Create(nil, True, False, '');
+end;
+
+destructor TPingThread.Destroy;
+begin
+  RequestStop;
+  // Also covers an exception before Start was called.
+  if Suspended then Start;
+  WaitFor;
+  FreeAndNil(FWakeEvent);
+  inherited Destroy;
+end;
+
+procedure TPingThread.RequestStop;
+begin
+  Terminate;
+  if FWakeEvent <> nil then FWakeEvent.SetEvent;
 end;
 
 procedure TPingThread.Execute;
-var
-  Slept: integer;
 begin
   while not Terminated do
   begin
@@ -559,43 +477,32 @@ begin
     except
       // Ignore exceptions during ping
     end;
-    // Дробим ожидание интервала, чтобы Terminate замечался за ~100 мс,
-    // а не за полный FIntervalMs.
-    Slept := 0;
-    while (Slept < FIntervalMs) and not Terminated do
-    begin
-      Sleep(100);
-      Inc(Slept, 100);
-    end;
+    if not Terminated then
+      FWakeEvent.WaitFor(FIntervalMs);
   end;
 end;
 
 procedure TPingThread.DoPing;
 var
   Result: TPingResult;
-  NewState: TNodeState;
   LocalNodeManager: TNodeManager;
 begin
-  // Сохраняем ссылку локально ДО использования (защита от гонки)
+  // Manager ownership lasts until this worker has been joined.
   LocalNodeManager := FNodeManager;
   if LocalNodeManager = nil then Exit;
 
   try
-    Result := PingHost(FHost, FTimeoutMs);
+    Result := FNodeManager.FPingFunction(FHost, FTimeoutMs);
 
-    if Result.Success then
-      NewState := nsUp
-    else
-      NewState := nsDown;
 
-    // Используем локальную копию — она не изменится даже если поток будет уничтожен
+    // Stop/reconfiguration waits for this operation before replacing data.
     if not Terminated then
-      LocalNodeManager.UpdateNodeState(FNodeId, NewState);
+      LocalNodeManager.RecordProbeResult(FNodeId, Result.Success, Now, Result.ResponseTime);
   except
     on E: Exception do
     begin
       if not Terminated then
-        LocalNodeManager.UpdateNodeState(FNodeId, nsDown);
+        LocalNodeManager.RecordProbeResult(FNodeId, False, Now, -1);
     end;
   end;
 end;

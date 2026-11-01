@@ -11,7 +11,7 @@ object AboutForm: TAboutForm
   ClientWidth = 199
   FormStyle = fsStayOnTop
   Position = poScreenCenter
-  LCLVersion = '4.6.0.0'
+  LCLVersion = '4.8.0.0'
   OnCreate = FormCreate
   object StatusBarAbout: TStatusBar
     Left = 0
@@ -44,7 +44,6 @@ object AboutForm: TAboutForm
   object LabelTgLNK: TLabel
     AnchorSideRight.Side = asrCenter
     AnchorSideBottom.Side = asrBottom
-    Cursor = crHandPoint
     Left = 98
     Height = 15
     Top = 202
@@ -76,7 +75,6 @@ object AboutForm: TAboutForm
   object LabelGitLNK: TLabel
     AnchorSideRight.Side = asrCenter
     AnchorSideBottom.Side = asrBottom
-    Cursor = crHandPoint
     Left = 86
     Height = 15
     Top = 186
@@ -94,20 +92,17 @@ object AboutForm: TAboutForm
   object LUpdateStatus: TLabel
     Left = 6
     Height = 16
-    Top = 217
+    Top = 213
     Width = 187
     Alignment = taCenter
     Anchors = [akLeft, akRight]
     AutoSize = False
-    OnMouseLeave = LUpdateStatusMouseLeave
-    OnMouseMove = LUpdateStatusMouseMove
   end
   object Image1: TImage
-    Left = 4
-    Height = 158
-    Top = 0
-    Width = 190
-    KeepOriginYWhenClipped = True
+    Left = 8
+    Height = 168
+    Top = 8
+    Width = 184
     Picture.Data = {
       1754506F727461626C654E6574776F726B4772617068696394BE000089504E47
       0D0A1A0A0000000D4948445200000200000001AC08030000009C90EFC0000000
@@ -1637,5 +1632,6 @@ object AboutForm: TAboutForm
       5667E2B10000000049454E44AE426082
     }
     Proportional = True
+    Transparent = True
   end
 end

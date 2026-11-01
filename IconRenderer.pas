@@ -1,4 +1,4 @@
-unit IconRenderer;
+﻿unit IconRenderer;
 
 {$mode objfpc}{$H+}
 
@@ -17,133 +17,119 @@ type
 
 implementation
 
-uses
-  LCLType, LCLIntf;
-
 class function TIconRenderer.GetStateColor(State: ConfigManager.TNodeState): TColor;
 begin
   case State of
-    nsUnknown: Result := clGray;
-    nsUp: Result := clLime;
-    nsDown: Result := clRed;
-    else
-      Result := clGray;
-      // дефолт на случай неизвестного значения
+    nsUp: Result := RGBToColor(47, 225, 119);
+    nsDown: Result := RGBToColor(245, 69, 83);
+  else
+    Result := RGBToColor(129, 140, 155);
   end;
 end;
 
-
-// ScanLine помечен как «not portable», но это намеренная техника попиксельного
-// рендера; приложение Windows-only, поэтому предупреждение 5044 здесь подавляем.
-{$push}{$warn 5044 off}
 class function TIconRenderer.RenderGroupIcon(const Group: TGroupInfo): TIcon;
+const
+  IconSize = 32;
+  PixelOffset = 6 + 16 + 40;
+  PixelBytes = IconSize * IconSize * 4;
+  MaskBytes = IconSize * 4; // Each monochrome mask row is DWORD aligned.
 var
-  Bmp: TBitmap;
-  P: PRGBQuad;
-  X, Y: integer;
-  LEDSize, Spacing, Margin, I: integer;
+  Data: array[0..PixelOffset + PixelBytes + MaskBytes - 1] of Byte;
+  Stream: TMemoryStream;
+  Side, Count, I, X, Y, Offset, MaskOffset: Integer;
+  Cell, CX, CY, Radius, Distance, Coverage: Double;
+  Color: TColor;
+  State: ConfigManager.TNodeState;
+
+  procedure PutWord(Index: Integer; Value: Word);
+  begin
+    Data[Index] := Value and $FF;
+    Data[Index + 1] := (Value shr 8) and $FF;
+  end;
+
+  procedure PutDWord(Index: Integer; Value: LongWord);
+  begin
+    PutWord(Index, Value and $FFFF);
+    PutWord(Index + 2, Value shr 16);
+  end;
+
 begin
+  FillChar(Data, SizeOf(Data), 0);
+  // ICO directory, one 32-bit DIB with straight alpha and an AND mask.
+  PutWord(2, 1);
+  PutWord(4, 1);
+  Data[6] := IconSize;
+  Data[7] := IconSize;
+  PutWord(10, 1);
+  PutWord(12, 32);
+  PutDWord(14, 40 + PixelBytes + MaskBytes);
+  PutDWord(18, 22);
+  PutDWord(22, 40);
+  PutDWord(26, IconSize);
+  PutDWord(30, IconSize * 2); // DIB height includes the AND mask.
+  PutWord(34, 1);
+  PutWord(36, 32);
+  PutDWord(42, PixelBytes + MaskBytes);
+
+  case Group.GroupType of
+    gt2x2: Side := 2;
+    gt3x3: Side := 3;
+  else
+    Side := 1;
+  end;
+  Cell := IconSize / Side;
+  Radius := Cell * 0.40;
+  Count := Length(Group.NodeStates);
+  if Count > Side * Side then Count := Side * Side;
+  // Keep the single unknown indicator before the first state arrives.
+  if (Side = 1) and (Count = 0) then Count := 1;
+  for I := 0 to Count - 1 do
+  begin
+    State := nsUnknown;
+    if I < Length(Group.NodeStates) then State := Group.NodeStates[I];
+    Color := GetStateColor(State);
+    CX := (I mod Side) * Cell + Cell / 2;
+    CY := (I div Side) * Cell + Cell / 2;
+    for Y := 0 to IconSize - 1 do
+      for X := 0 to IconSize - 1 do
+      begin
+        Distance := Sqrt(Sqr(X + 0.5 - CX) + Sqr(Y + 0.5 - CY));
+        if Distance >= Radius then Continue;
+        Coverage := Radius - Distance;
+        if Coverage > 1 then Coverage := 1;
+        // DIB rows run bottom to top; color bytes are BGRA.
+        Offset := PixelOffset + ((IconSize - 1 - Y) * IconSize + X) * 4;
+        Data[Offset] := Blue(Color);
+        Data[Offset + 1] := Green(Color);
+        Data[Offset + 2] := Red(Color);
+        Data[Offset + 3] := Trunc(Coverage * 255);
+      end;
+  end;
+  for Y := 0 to IconSize - 1 do
+    for X := 0 to IconSize - 1 do
+    begin
+      Offset := PixelOffset + (Y * IconSize + X) * 4;
+      if Data[Offset + 3] = 0 then
+      begin
+        MaskOffset := PixelOffset + PixelBytes + Y * 4 + X div 8;
+        Data[MaskOffset] := Data[MaskOffset] or (Byte($80) shr (X mod 8));
+      end;
+    end;
+
   Result := TIcon.Create;
-
-  Bmp := TBitmap.Create;
   try
-    Bmp.SetSize(16, 16);
-    Bmp.PixelFormat := pf32bit;
-
-    // Обнуляем bitmap (полностью прозрачный)
-    for Y := 0 to 15 do
-    begin
-      P := Bmp.ScanLine[Y];
-      for X := 0 to 15 do
-      begin
-        P^.rgbBlue := 1;
-        P^.rgbGreen := 1;
-        P^.rgbRed := 1;
-        P^.rgbReserved := 0; // <-- альфа = 0 (прозрачный)
-        Inc(P);
-      end;
+    Stream := TMemoryStream.Create;
+    try
+      Stream.WriteBuffer(Data, SizeOf(Data));
+      Stream.Position := 0;
+      Result.LoadFromStream(Stream);
+    finally
+      FreeAndNil(Stream);
     end;
-
-    case Group.GroupType of
-      gtSingle:
-      begin
-        LEDSize := 12;
-        Margin := 2;
-
-        // Защита от пустого NodeStates: иначе обращение к [0] вне границ
-        if Length(Group.NodeStates) > 0 then
-          Bmp.Canvas.Brush.Color := GetStateColor(Group.NodeStates[0])
-        else
-          Bmp.Canvas.Brush.Color := GetStateColor(nsUnknown);
-        Bmp.Canvas.Pen.Style := psClear;
-        Bmp.Canvas.Ellipse(Margin, Margin, Margin + LEDSize, Margin + LEDSize);
-      end;
-
-      gt2x2:
-      begin
-        LEDSize := 6;
-        Spacing := 1;
-        Margin := 1;
-
-        for I := 0 to High(Group.NodeStates) do
-        begin
-          X := Margin + (I mod 2) * (LEDSize + Spacing);
-          Y := Margin + (I div 2) * (LEDSize + Spacing);
-
-          Bmp.Canvas.Brush.Color := GetStateColor(Group.NodeStates[I]);
-          Bmp.Canvas.Pen.Style := psClear;
-          Bmp.Canvas.Ellipse(X, Y, X + LEDSize, Y + LEDSize);
-        end;
-      end;
-
-      gt3x3:
-      begin
-        LEDSize := 4;
-        Spacing := 1;
-        Margin := 0;
-
-        for I := 0 to High(Group.NodeStates) do
-        begin
-          X := Margin + (I mod 3) * (LEDSize + Spacing);
-          Y := Margin + (I div 3) * (LEDSize + Spacing);
-
-          Bmp.Canvas.Brush.Color := GetStateColor(Group.NodeStates[I]);
-          Bmp.Canvas.Pen.Style := psClear;
-          Bmp.Canvas.Ellipse(X, Y, X + LEDSize, Y + LEDSize);
-        end;
-      end;
-    end;
-
-
-    for Y := 0 to 15 do
-    begin
-      P := Bmp.ScanLine[Y];
-      for X := 0 to 15 do
-      begin
-        if P^.rgbReserved = 0 then
-        begin
-          // Проверяем: это фон (1,1,1) или GDI-пиксель?
-          if (P^.rgbRed = 1) and (P^.rgbGreen = 1) and (P^.rgbBlue = 1) then
-          begin
-            // фон — оставляем прозрачным, зануляем
-            P^.rgbRed := 0;
-            P^.rgbGreen := 0;
-            P^.rgbBlue := 0;
-          end
-          else
-            P^.rgbReserved := 255;
-          // нарисованный пиксель — делаем непрозрачным
-        end;
-        Inc(P);
-      end;
-    end;
-
-    Result.Assign(Bmp);
-
-  finally
-    Bmp.Free;
+  except
+    FreeAndNil(Result);
+    raise;
   end;
 end;
-{$pop}
 
 end.

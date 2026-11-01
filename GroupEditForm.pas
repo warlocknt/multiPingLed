@@ -6,7 +6,7 @@ interface
 
 uses
   Classes, SysUtils, Forms, Controls, Graphics, Dialogs, StdCtrls, CheckLst,
-  ComCtrls, ConfigManager, LangManager;
+  ConfigManager, LangManager;
 
 type
 
@@ -28,15 +28,15 @@ type
     FGroup: TNodeGroup;
     FAllNodes: array of TNodeConfig;
     procedure UpdateCounter;
-    function GetRequiredCount: integer;
-    function GetMinCount: integer;
-    function GetSelectedCount: integer;
+    function GetRequiredCount: Integer;
+    function GetMinCount: Integer;
+    function GetSelectedCount: Integer;
     procedure FillNodeList;
     procedure OnTypeChange(Sender: TObject);
   public
     procedure SetData(const Group: TNodeGroup; const AllNodes: array of TNodeConfig);
     function GetData: TNodeGroup;
-    function ValidateInput: boolean;
+    function ValidateInput: Boolean;
     procedure ApplyLocalization;
   end;
 
@@ -51,9 +51,11 @@ begin
   cbType.OnChange := @OnTypeChange;
 end;
 
+
 procedure TGroupEditForm.OnNodeCheckClick(Sender: TObject);
 begin
   UpdateCounter;
+
 end;
 
 procedure TGroupEditForm.OnTypeChange(Sender: TObject);
@@ -76,10 +78,9 @@ begin
   cbType.Items.Add(_('type_3x3'));
 end;
 
-procedure TGroupEditForm.SetData(const Group: TNodeGroup;
-  const AllNodes: array of TNodeConfig);
+procedure TGroupEditForm.SetData(const Group: TNodeGroup; const AllNodes: array of TNodeConfig);
 var
-  I: integer;
+  I: Integer;
 begin
   FGroup := Group;
   SetLength(FAllNodes, Length(AllNodes));
@@ -91,8 +92,8 @@ begin
     gtSingle: cbType.ItemIndex := 0;
     gt2x2: cbType.ItemIndex := 1;
     gt3x3: cbType.ItemIndex := 2;
-    else
-      cbType.ItemIndex := 0;
+  else
+    cbType.ItemIndex := 0;
   end;
 
   FillNodeList;
@@ -101,7 +102,7 @@ end;
 
 function TGroupEditForm.GetData: TNodeGroup;
 var
-  I, Count: integer;
+  I, Count: Integer;
 begin
   Result := FGroup;
   Result.Name := Trim(edName.Text);
@@ -135,19 +136,16 @@ end;
 
 procedure TGroupEditForm.UpdateCounter;
 var
-  Count, MinCount, MaxCount: integer;
+  Count, MinCount, MaxCount: Integer;
 begin
-  // тип группы выбираем динамически, если выбрано больше 9, то красным
   Count := GetSelectedCount;
   case Count of
-    0..1: cbType.ItemIndex := 0;
+    1: cbType.ItemIndex := 0;
     2..4: cbType.ItemIndex := 1;
     5..9: cbType.ItemIndex := 2;
     else
       cbType.ItemIndex := 2;
   end;
-
-  Application.ProcessMessages;
 
   MinCount := GetMinCount;
   MaxCount := GetRequiredCount;
@@ -160,31 +158,31 @@ begin
     CounterLbl.Font.Color := clRed;
 end;
 
-function TGroupEditForm.GetRequiredCount: integer;
+function TGroupEditForm.GetRequiredCount: Integer;
 begin
   case cbType.ItemIndex of
     0: Result := 1;
     1: Result := 4;  // 2x2: max 4, min 2
     2: Result := 9;  // 3x3: max 9, min 5
-    else
-      Result := 0;
+  else
+    Result := 0;
   end;
 end;
 
-function TGroupEditForm.GetMinCount: integer;
+function TGroupEditForm.GetMinCount: Integer;
 begin
   case cbType.ItemIndex of
     0: Result := 1;
     1: Result := 2;  // 2x2: min 2
     2: Result := 5;  // 3x3: min 5
-    else
-      Result := 0;
+  else
+    Result := 0;
   end;
 end;
 
-function TGroupEditForm.GetSelectedCount: integer;
+function TGroupEditForm.GetSelectedCount: Integer;
 var
-  I: integer;
+  I: Integer;
 begin
   Result := 0;
   for I := 0 to clbNodes.Count - 1 do
@@ -194,10 +192,10 @@ end;
 
 procedure TGroupEditForm.FillNodeList;
 var
-  I: integer;
+  I: Integer;
   NodeName: string;
-  NodeId, J: integer;
-  IsInGroup: boolean;
+  NodeId, J: Integer;
+  IsInGroup: Boolean;
 begin
   clbNodes.Items.Clear;
 
@@ -223,9 +221,9 @@ begin
   end;
 end;
 
-function TGroupEditForm.ValidateInput: boolean;
+function TGroupEditForm.ValidateInput: Boolean;
 var
-  Count, MinCount, MaxCount: integer;
+  Count, MinCount, MaxCount: Integer;
 begin
   Result := False;
 

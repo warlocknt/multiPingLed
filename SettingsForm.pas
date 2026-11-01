@@ -1,4 +1,4 @@
-unit SettingsForm;
+﻿unit SettingsForm;
 
 {$mode objfpc}{$H+}
 
@@ -6,24 +6,22 @@ interface
 
 uses
   Classes, SysUtils, Forms, Controls, Graphics, StdCtrls, ExtCtrls, Dialogs,
-  ComCtrls, Menus, ConfigManager, NodeEditForm, GroupEditForm, LangManager, Clipbrd;
-
-type
-  TMacroInfo = record
-    Name: string;        // например, '{host}'
-    Description: string; // например, 'IP-адрес или DNS-имя узла'
-  end;
+  ComCtrls, Menus, ConfigManager, NodeEditForm, GroupEditForm, LangManager;
 
 type
 
   { TSettingsForm }
 
   TSettingsForm = class(TForm)
+    cbLogging: TCheckBox;
+    cbPingComparison: TCheckBox;
+    cbSessionReport: TCheckBox;
     cbSelectLanguage: TComboBox;
     cbBaloonHint: TCheckBox;
     eCommandExec: TEdit;
     lCommandExec: TLabel;
     lLang: TLabel;
+    Memo1: TMemo;
     PageControl: TPageControl;
     NodesTab: TTabSheet;
     GroupsTab: TTabSheet;
@@ -45,10 +43,10 @@ type
     btnDeleteGroup: TButton;
     btnApply: TButton;
     btnCancel: TButton;
-    MacrosHintPanel: TPanel;
     SettingsFormButtonsPanel: TPanel;
     TabSheet1: TTabSheet;
 
+    procedure DiagnosticsChanged(Sender: TObject);
     procedure FormCreate(Sender: TObject);
     procedure FormShow(Sender: TObject);
     procedure cbSelectLanguageChange(Sender: TObject);
@@ -63,30 +61,24 @@ type
     procedure btnImportNodesClick(Sender: TObject);
     procedure btnExportNodesClick(Sender: TObject);
     procedure GroupsListItemChecked(Sender: TObject; Item: TListItem);
-    procedure MacrosHintPanelClick(Sender: TObject);
-    procedure NodesListSelectItem(Sender: TObject; Item: TListItem; Selected: boolean);
-    procedure GroupsListSelectItem(Sender: TObject; Item: TListItem; Selected: boolean);
-    procedure BuildMacrosHint;
-    procedure OnMacroLabelClick(Sender: TObject);
-    procedure OnMacroMouseEnter(Sender: TObject);
-    procedure OnMacroMouseLeave(Sender: TObject);
-    procedure OnCopiedTimer(Sender: TObject);
+    procedure NodesListSelectItem(Sender: TObject; Item: TListItem; Selected: Boolean);
+    procedure GroupsListSelectItem(Sender: TObject; Item: TListItem; Selected: Boolean);
   private
     FConfig: TAppConfig;
     FOnApply: TNotifyEvent;
     FOnLanguageChanged: TNotifyEvent;
     FConfigManager: TConfigManager;
-    FModified: boolean;
-    FLoading: boolean;
-    FCopiedLabel: TLabel;
-    FCopiedTimer: TTimer;
+    FModified: Boolean;
+    FLoading: Boolean;
+
     procedure SetupEvents;
+    procedure LoadDiagnostics;
     procedure ApplyLocalization;
     procedure RefreshNodesList;
     procedure RefreshGroupsList;
-    function IsHostExists(const Host: string; ExcludeIndex: integer = -1): boolean;
-    function GetNextNodeId: integer;
-    function GetNextGroupId: integer;
+    function IsHostExists(const Host: string; ExcludeIndex: Integer = -1): Boolean;
+    function GetNextNodeId: Integer;
+    function GetNextGroupId: Integer;
     procedure LoadNodeCommandFields;
     procedure SaveNodeCommandFields;
     procedure eCommandChange(Sender: TObject);
@@ -94,42 +86,19 @@ type
   public
     procedure SetConfig(const Config: TAppConfig);
     property OnApply: TNotifyEvent read FOnApply write FOnApply;
-    property OnLanguageChanged: TNotifyEvent
-      read FOnLanguageChanged write FOnLanguageChanged;
+    property OnLanguageChanged: TNotifyEvent read FOnLanguageChanged write FOnLanguageChanged;
     property ConfigManager: TConfigManager read FConfigManager write FConfigManager;
   end;
-
-const
-  Macros: array of TMacroInfo = (
-    (Name: '{host}'; Description: 'IP-адрес или DNS-имя узла'),
-    (Name: '{name}'; Description: 'Имя узла из настроек'),
-    (Name: '{status}'; Description:
-    'Новый статус узла: up или down'),
-    (Name: '{group}'; Description:
-    'Имя группы, к которой относится узел'),
-    (Name: '{ping}'; Description:
-    'Время отклика последнего пинга, мс'),
-    (Name: '{last_ping_time}';
-    Description: 'Время пинга, вызвавшего смену статуса (YYYY-MM-DD HH:MM:SS)'),
-    (Name: '{exe_dir}'; Description:
-    'Папка с multiPingLed.exe (без \ на конце)'),
-    (Name: '{config_dir}'; Description:
-    'Папка с config.ini (без \ на конце)'),
-    (Name: '{datetime}'; Description:
-    'Текущее время в момент запуска команды (YYYY-MM-DD HH:MM:SS)'),
-    (Name: '{app_version}';
-    Description: 'Версия приложения (сейчас %s)')
-    );
 
 implementation
 
 {$R *.lfm}
 
-uses Windows;
+uses LogWriter;
 
 procedure SettingsDebugLog(const Msg: string);
 begin
-  OutputDebugString(PChar('multiPingLed[Settings]: ' + Msg));
+  ApplicationLog('multiPingLed[Settings]: ' + Msg);
 end;
 
 procedure TSettingsForm.FormCreate(Sender: TObject);
@@ -141,12 +110,7 @@ begin
   ApplyLocalization;
   FLoading := False;
   SettingsDebugLog('FormCreate done');
-  PageControl.TabIndex := 0;
-
-  FCopiedTimer := TTimer.Create(Self);
-  FCopiedTimer.Interval := 1000;
-  FCopiedTimer.Enabled := False;
-  FCopiedTimer.OnTimer := @OnCopiedTimer;
+  PageControl.TabIndex :=0 ;
 end;
 
 procedure TSettingsForm.FormShow(Sender: TObject);
@@ -155,13 +119,36 @@ begin
   FLoading := True;
   try
     LoadLanguageSelector;
+    LoadDiagnostics;
     if Assigned(FConfigManager) and Assigned(cbBaloonHint) then
       cbBaloonHint.Checked := FConfigManager.GetBalloonHintEnabled;
-    BuildMacrosHint;
     ApplyLocalization;
   finally
     FLoading := False;
   end;
+end;
+
+procedure TSettingsForm.LoadDiagnostics;
+var WasLoading: Boolean;
+begin
+  WasLoading := FLoading;
+  FLoading := True;
+  try
+    cbLogging.Checked := FConfig.LoggingEnabled;
+    cbPingComparison.Checked := FConfig.ComparePingEnabled;
+    cbSessionReport.Checked := FConfig.CreateSessionReport;
+    cbPingComparison.Enabled := cbLogging.Checked;
+  finally FLoading := WasLoading; end;
+end;
+
+procedure TSettingsForm.DiagnosticsChanged(Sender: TObject);
+begin
+  cbPingComparison.Enabled := cbLogging.Checked;
+  if FLoading then Exit;
+  FConfig.LoggingEnabled := cbLogging.Checked;
+  FConfig.ComparePingEnabled := cbPingComparison.Checked;
+  FConfig.CreateSessionReport := cbSessionReport.Checked;
+  FModified := True;
 end;
 
 procedure TSettingsForm.SetupEvents;
@@ -178,18 +165,18 @@ end;
 
 procedure TSettingsForm.LoadLanguageSelector;
 var
-  i: integer;
+  i: Integer;
   LangInfo: TLanguageInfo;
-  LangCount: integer;
-  CurrentIdx: integer;
+  LangCount: Integer;
+  CurrentIdx: Integer;
 begin
   cbSelectLanguage.Items.Clear;
-
+  
   if not Assigned(LangMgr) then Exit;
-
+  
   LangCount := LangMgr.GetLanguageCount;
   if LangCount = 0 then Exit;
-
+  
   CurrentIdx := -1;
   for i := 0 to LangCount - 1 do
   begin
@@ -198,33 +185,42 @@ begin
     if CompareText(LangInfo.Code, LangMgr.CurrentLanguage) = 0 then
       CurrentIdx := i;
   end;
-
+  
   if CurrentIdx >= 0 then
     cbSelectLanguage.ItemIndex := CurrentIdx
   else if cbSelectLanguage.Items.Count > 0 then
     cbSelectLanguage.ItemIndex := 0;
-
+    
   cbSelectLanguage.OnChange := @cbSelectLanguageChange;
 end;
 
 procedure TSettingsForm.cbSelectLanguageChange(Sender: TObject);
 var
-  Idx: integer;
+  Idx: Integer;
 begin
   if FLoading then Exit;
 
   Idx := cbSelectLanguage.ItemIndex;
   if Idx < 0 then Exit;
 
-  // Просто помечаем, что язык изменён — применится по «Применить»
+  
+  // Just mark that language was changed - will be applied on Apply
   FModified := True;
 end;
 
 procedure TSettingsForm.ApplyLocalization;
 begin
   if not Assigned(LangMgr) then Exit;
-
+  
   Caption := _('settings_title');
+  cbLogging.Caption := _('option_logging');
+  cbSessionReport.Caption := _('option_session_report');
+  cbPingComparison.Caption := _('option_ping_comparison');
+  Memo1.Lines.Text := '{host}' + #9 + _('command_host') + LineEnding +
+    '{name}' + #9 + _('command_name') + LineEnding +
+    '{status}' + #9 + _('command_status') + LineEnding +
+    '{group}' + #9 + _('command_group') + LineEnding +
+    '{ping}' + #9 + _('command_ping');
 
   // Tab sheets
   if Assigned(NodesTab) then
@@ -290,75 +286,90 @@ end;
 
 procedure TSettingsForm.SetConfig(const Config: TAppConfig);
 begin
-  SettingsDebugLog('SetConfig: ' + IntToStr(Length(Config.Nodes)) +
-    ' nodes, ' + IntToStr(Length(Config.Groups)) + ' groups');
-  FConfig := Config;
-  RefreshNodesList;
-  RefreshGroupsList;
-  ApplyLocalization;
+  SettingsDebugLog('SetConfig: ' + IntToStr(Length(Config.Nodes)) + ' nodes, ' + IntToStr(Length(Config.Groups)) + ' groups');
+  FConfig := CloneConfig(Config);
+  FLoading := True;
+  try
+    RefreshNodesList;
+    RefreshGroupsList;
+    LoadDiagnostics;
+    ApplyLocalization;
+  finally
+    FLoading := False;
+  end;
   SettingsDebugLog('SetConfig done');
 end;
 
 procedure TSettingsForm.RefreshNodesList;
 var
-  I: integer;
+  I: Integer;
   Item: TListItem;
+  WasLoading: Boolean;
 begin
-  NodesList.Items.Clear;
+  WasLoading := FLoading;
+  FLoading := True;
+  try
+    NodesList.Items.Clear;
 
-  for I := 0 to High(FConfig.Nodes) do
-  begin
-    Item := NodesList.Items.Add;
-    Item.Caption := FConfig.Nodes[I].Name;
-    Item.SubItems.Add(FConfig.Nodes[I].Host);
-    Item.SubItems.Add(IntToStr(FConfig.Nodes[I].IntervalMs) + ' ms');
-    Item.SubItems.Add(IntToStr(FConfig.Nodes[I].TimeoutMs) + ' ms');
-    Item.Data := Pointer(PtrInt(FConfig.Nodes[I].Id));
+    for I := 0 to High(FConfig.Nodes) do
+    begin
+      Item := NodesList.Items.Add;
+      Item.Caption := FConfig.Nodes[I].Name;
+      Item.SubItems.Add(FConfig.Nodes[I].Host);
+      Item.SubItems.Add(IntToStr(FConfig.Nodes[I].IntervalMs) + ' ' + _('unit_ms'));
+      Item.SubItems.Add(IntToStr(FConfig.Nodes[I].TimeoutMs) + ' ' + _('unit_ms'));
+    end;
+  finally
+    FLoading := WasLoading;
   end;
 end;
 
 procedure TSettingsForm.RefreshGroupsList;
 var
-  I, J: integer;
+  I, J: Integer;
   Item: TListItem;
   NodeIdsStr: string;
   TypeStr: string;
-  Count: integer;
+  Count: Integer;
+  WasLoading: Boolean;
 begin
-  GroupsList.Items.Clear;
+  WasLoading := FLoading;
+  FLoading := True;
+  try
+    GroupsList.Items.Clear;
 
-  for I := 0 to High(FConfig.Groups) do
-  begin
-    Item := GroupsList.Items.Add;
-    Item.Caption := FConfig.Groups[I].Name;
-    Item.Checked := FConfig.Groups[I].Enabled;
-
-    TypeStr := '';
-    case FConfig.Groups[I].GroupType of
-      gtSingle: TypeStr := _('type_single');
-      gt2x2: TypeStr := _('type_2x2');
-      gt3x3: TypeStr := _('type_3x3');
-    end;
-    Item.SubItems.Add(TypeStr);
-
-    NodeIdsStr := '';
-    Count := 0;
-    for J := 0 to High(FConfig.Groups[I].NodeIds) do
+    for I := 0 to High(FConfig.Groups) do
     begin
-      if FConfig.Groups[I].NodeIds[J] > 0 then
-      begin
-        Inc(Count);
-        if NodeIdsStr <> '' then NodeIdsStr := NodeIdsStr + ', ';
-        NodeIdsStr := NodeIdsStr + IntToStr(FConfig.Groups[I].NodeIds[J]);
+      Item := GroupsList.Items.Add;
+      Item.Caption := FConfig.Groups[I].Name;
+      Item.Checked := FConfig.Groups[I].Enabled;
+
+      case FConfig.Groups[I].GroupType of
+        gtSingle: TypeStr := _('type_single');
+        gt2x2: TypeStr := _('type_2x2');
+        gt3x3: TypeStr := _('type_3x3');
       end;
+      Item.SubItems.Add(TypeStr);
+
+      NodeIdsStr := '';
+      Count := 0;
+      for J := 0 to High(FConfig.Groups[I].NodeIds) do
+      begin
+        if FConfig.Groups[I].NodeIds[J] > 0 then
+        begin
+          Inc(Count);
+          if NodeIdsStr <> '' then NodeIdsStr := NodeIdsStr + ', ';
+          NodeIdsStr := NodeIdsStr + IntToStr(FConfig.Groups[I].NodeIds[J]);
+        end;
+      end;
+      Item.SubItems.Add(Format('%d (%s)', [Count, NodeIdsStr]));
     end;
-    Item.SubItems.Add(Format('%d (%s)', [Count, NodeIdsStr]));
-    Item.Data := Pointer(PtrInt(FConfig.Groups[I].Id));
+  finally
+    FLoading := WasLoading;
   end;
 end;
 
-procedure TSettingsForm.NodesListSelectItem(Sender: TObject; Item: TListItem;
-  Selected: boolean);
+procedure TSettingsForm.NodesListSelectItem(Sender: TObject; Item: TListItem; Selected: Boolean);
 begin
   btnEditNode.Enabled := Selected;
   btnDeleteNode.Enabled := Selected;
@@ -368,30 +379,36 @@ end;
 
 procedure TSettingsForm.LoadNodeCommandFields;
 var
-  SelIndex: integer;
+  SelIndex: Integer;
+  WasLoading: Boolean;
 begin
-  if (NodesList.Selected = nil) or (NodesList.Selected.Index < 0) then
-  begin
-    if Assigned(eCommandExec) then eCommandExec.Text := '';
-    Exit;
-  end;
-  SelIndex := NodesList.Selected.Index;
-  if (SelIndex >= 0) and (SelIndex < Length(FConfig.Nodes)) then
-  begin
-    if Assigned(eCommandExec) then eCommandExec.Text := FConfig.Nodes[SelIndex].Command;
+  WasLoading := FLoading;
+  FLoading := True;
+  try
+    if (NodesList.Selected = nil) or (NodesList.Selected.Index < 0) then
+    begin
+      if Assigned(eCommandExec) then eCommandExec.Text := '';
+      Exit;
+    end;
+    SelIndex := NodesList.Selected.Index;
+    if (SelIndex >= 0) and (SelIndex < Length(FConfig.Nodes)) then
+    begin
+      if Assigned(eCommandExec) then eCommandExec.Text := FConfig.Nodes[SelIndex].Command;
+    end;
+  finally
+    FLoading := WasLoading;
   end;
 end;
 
 procedure TSettingsForm.SaveNodeCommandFields;
 var
-  SelIndex: integer;
+  SelIndex: Integer;
 begin
   if (NodesList.Selected = nil) or (NodesList.Selected.Index < 0) then Exit;
   SelIndex := NodesList.Selected.Index;
   if (SelIndex >= 0) and (SelIndex < Length(FConfig.Nodes)) then
   begin
-    if Assigned(eCommandExec) then FConfig.Nodes[SelIndex].Command :=
-        Trim(eCommandExec.Text);
+    if Assigned(eCommandExec) then FConfig.Nodes[SelIndex].Command := Trim(eCommandExec.Text);
   end;
 end;
 
@@ -402,96 +419,15 @@ begin
   FModified := True;
 end;
 
-procedure TSettingsForm.GroupsListSelectItem(Sender: TObject;
-  Item: TListItem; Selected: boolean);
+procedure TSettingsForm.GroupsListSelectItem(Sender: TObject; Item: TListItem; Selected: Boolean);
 begin
   btnEditGroup.Enabled := Selected;
   btnDeleteGroup.Enabled := Selected;
 end;
 
-procedure TSettingsForm.BuildMacrosHint;
-const
-  ColGap = 130;  // отступ описания от имени макроса
-  RowStep = 18;   // высота строки
+function TSettingsForm.GetNextNodeId: Integer;
 var
-  I, Y: integer;
-  LblName, LblDesc: TLabel;
-begin
-  MacrosHintPanel.DisableAlign;
-  try
-    Y := 4;
-    for I := 0 to High(Macros) do
-    begin
-      // Кликабельное имя макроса
-      LblName := TLabel.Create(MacrosHintPanel);
-      LblName.Parent := MacrosHintPanel;
-      LblName.Left := 4;
-      LblName.Top := Y;
-      LblName.Caption := Macros[I].Name;
-      LblName.Font.Color := clBlue;
-      LblName.Cursor := crHandPoint;
-      LblName.Hint := _('hint_click_to_copy');
-      LblName.ShowHint := True;
-      LblName.OnClick := @OnMacroLabelClick;
-      LblName.OnMouseEnter := @OnMacroMouseEnter;
-      LblName.OnMouseLeave := @OnMacroMouseLeave;
-
-      // Описание — обычная статичная метка
-      LblDesc := TLabel.Create(MacrosHintPanel);
-      LblDesc.Parent := MacrosHintPanel;
-      LblDesc.Left := ColGap;
-      LblDesc.Top := Y;
-      if (Macros[I].Name = '{app_version}') and Assigned(FConfigManager) then
-        LblDesc.Caption := Format(Macros[I].Description, [FConfigManager.GetVersion])
-      else if Macros[I].Name = '{app_version}' then
-        LblDesc.Caption := Format(Macros[I].Description, ['?'])
-      else
-        LblDesc.Caption := Macros[I].Description;
-
-      Inc(Y, RowStep);
-    end;
-  finally
-    MacrosHintPanel.EnableAlign;
-  end;
-end;
-
-procedure TSettingsForm.OnMacroLabelClick(Sender: TObject);
-begin
-  Clipboard.AsText := (Sender as TLabel).Caption;
-  // Визуальный feedback
-  if FCopiedLabel <> nil then
-    FCopiedLabel.Font.Color := clBlue;
-  FCopiedLabel := Sender as TLabel;
-  FCopiedLabel.Font.Color := clGreen;
-  // Таймер вернёт цвет через секунду
-  FCopiedTimer.Enabled := False;
-  FCopiedTimer.Enabled := True;
-end;
-
-procedure TSettingsForm.OnMacroMouseEnter(Sender: TObject);
-begin
-  if Sender <> FCopiedLabel then
-    (Sender as TLabel).Font.Style := [fsUnderline];
-end;
-
-procedure TSettingsForm.OnMacroMouseLeave(Sender: TObject);
-begin
-  (Sender as TLabel).Font.Style := [];
-end;
-
-procedure TSettingsForm.OnCopiedTimer(Sender: TObject);
-begin
-  FCopiedTimer.Enabled := False;
-  if FCopiedLabel <> nil then
-  begin
-    FCopiedLabel.Font.Color := clBlue;
-    FCopiedLabel := nil;
-  end;
-end;
-
-function TSettingsForm.GetNextNodeId: integer;
-var
-  I: integer;
+  I: Integer;
 begin
   Result := 1;
   for I := 0 to High(FConfig.Nodes) do
@@ -501,9 +437,9 @@ begin
   end;
 end;
 
-function TSettingsForm.GetNextGroupId: integer;
+function TSettingsForm.GetNextGroupId: Integer;
 var
-  I: integer;
+  I: Integer;
 begin
   Result := 1;
   for I := 0 to High(FConfig.Groups) do
@@ -513,9 +449,9 @@ begin
   end;
 end;
 
-function TSettingsForm.IsHostExists(const Host: string; ExcludeIndex: integer): boolean;
+function TSettingsForm.IsHostExists(const Host: string; ExcludeIndex: Integer): Boolean;
 var
-  I: integer;
+  I: Integer;
 begin
   Result := False;
   for I := 0 to High(FConfig.Nodes) do
@@ -530,20 +466,21 @@ end;
 
 procedure TSettingsForm.btnAddNodeClick(Sender: TObject);
 var
-  NewIndex: integer;
+  NewIndex: Integer;
   NewNode: TNodeConfig;
   ExistingHosts: array of string;
-  I: integer;
+  I: Integer;
   Dlg: TNodeEditForm;
 begin
   // Prepare list of existing hosts
+  ExistingHosts := nil;
   SetLength(ExistingHosts, Length(FConfig.Nodes));
   for I := 0 to High(FConfig.Nodes) do
     ExistingHosts[I] := FConfig.Nodes[I].Host;
 
-  // Initialize new node (запись содержит managed-поля — не FillChar)
+  // Initialize new node
   NewNode := Default(TNodeConfig);
-  NewNode.Name := 'New Node';
+  NewNode.Name := _('default_node_name');
   NewNode.Host := '';
   NewNode.IntervalMs := 5000;
   NewNode.TimeoutMs := 2000;
@@ -555,21 +492,17 @@ begin
     Dlg.Caption := _('node_title_add');
     Dlg.SetData(NewNode, ExistingHosts, -1);
 
-    if Dlg.ShowModal = mrOk then
+    if Dlg.ShowModal = mrOK then
     begin
-      // При провале валидации (пустой/дублирующийся хост) узел не сохраняем
-      if Dlg.ValidateInput then
-      begin
-        NewNode := Dlg.GetData;
-        NewIndex := Length(FConfig.Nodes);
-        SetLength(FConfig.Nodes, NewIndex + 1);
+      NewNode := Dlg.GetData;
+      NewIndex := Length(FConfig.Nodes);
+      SetLength(FConfig.Nodes, NewIndex + 1);
 
-        NewNode.Id := GetNextNodeId;
-        FConfig.Nodes[NewIndex] := NewNode;
+      NewNode.Id := GetNextNodeId;
+      FConfig.Nodes[NewIndex] := NewNode;
 
-        FModified := True;
-        RefreshNodesList;
-      end;
+      FModified := True;
+      RefreshNodesList;
     end;
   finally
     Dlg.Free;
@@ -578,10 +511,10 @@ end;
 
 procedure TSettingsForm.btnEditNodeClick(Sender: TObject);
 var
-  SelIndex: integer;
+  SelIndex: Integer;
   EditedNode: TNodeConfig;
   ExistingHosts: array of string;
-  I: integer;
+  I: Integer;
   Dlg: TNodeEditForm;
 begin
   if NodesList.Selected = nil then Exit;
@@ -590,6 +523,7 @@ begin
   if (SelIndex < 0) or (SelIndex > High(FConfig.Nodes)) then Exit;
 
   // Prepare list of existing hosts (excluding current)
+  ExistingHosts := nil;
   SetLength(ExistingHosts, Length(FConfig.Nodes));
   for I := 0 to High(FConfig.Nodes) do
     ExistingHosts[I] := FConfig.Nodes[I].Host;
@@ -602,15 +536,11 @@ begin
     Dlg.Caption := _('node_title_edit');
     Dlg.SetData(EditedNode, ExistingHosts, SelIndex);
 
-    if Dlg.ShowModal = mrOk then
+    if Dlg.ShowModal = mrOK then
     begin
-      // При провале валидации (пустой/дублирующийся хост) изменения не сохраняем
-      if Dlg.ValidateInput then
-      begin
-        FConfig.Nodes[SelIndex] := Dlg.GetData;
-        FModified := True;
-        RefreshNodesList;
-      end;
+      FConfig.Nodes[SelIndex] := Dlg.GetData;
+      FModified := True;
+      RefreshNodesList;
     end;
   finally
     Dlg.Free;
@@ -619,11 +549,11 @@ end;
 
 procedure TSettingsForm.btnDeleteNodeClick(Sender: TObject);
 var
-  SelIndex: integer;
-  I: integer;
-  NodeId: integer;
-  CanDelete: boolean;
-  J: integer;
+  SelIndex: Integer;
+  I: Integer;
+  NodeId: Integer;
+  CanDelete: Boolean;
+  J: Integer;
 begin
   if NodesList.Selected = nil then Exit;
 
@@ -653,9 +583,8 @@ begin
     Exit;
   end;
 
-  if MessageDlg(_('title_confirm'), Format(_('confirm_delete_node'),
-    [FConfig.Nodes[SelIndex].Name]), mtConfirmation,
-    [mbYes, mbNo], 0) = mrYes then
+  if MessageDlg(_('title_confirm'), Format(_('confirm_delete_node'), [FConfig.Nodes[SelIndex].Name]),
+                mtConfirmation, [mbYes, mbNo], 0) = mrYes then
   begin
     // Remove node from array
     for I := SelIndex to High(FConfig.Nodes) - 1 do
@@ -669,7 +598,7 @@ end;
 
 procedure TSettingsForm.btnAddGroupClick(Sender: TObject);
 var
-  NewIndex: integer;
+  NewIndex: Integer;
   NewGroup: TNodeGroup;
   Dlg: TGroupEditForm;
 begin
@@ -680,9 +609,9 @@ begin
   end;
 
   NewGroup := Default(TNodeGroup);
-  // запись содержит managed-поля — не FillChar
-  NewGroup.Name := 'New Group';
+  NewGroup.Name := _('default_group_name');
   NewGroup.GroupType := gtSingle;
+  NewGroup.Enabled := True;
   SetLength(NewGroup.NodeIds, 1);
   if Length(FConfig.Nodes) > 0 then
     NewGroup.NodeIds[0] := FConfig.Nodes[0].Id;
@@ -693,7 +622,7 @@ begin
     Dlg.Caption := _('group_title_add');
     Dlg.SetData(NewGroup, FConfig.Nodes);
 
-    if Dlg.ShowModal = mrOk then
+    if Dlg.ShowModal = mrOK then
     begin
       if Dlg.ValidateInput then
       begin
@@ -715,7 +644,7 @@ end;
 
 procedure TSettingsForm.btnEditGroupClick(Sender: TObject);
 var
-  SelIndex: integer;
+  SelIndex: Integer;
   EditedGroup: TNodeGroup;
   Dlg: TGroupEditForm;
 begin
@@ -732,7 +661,7 @@ begin
     Dlg.Caption := _('group_title_edit');
     Dlg.SetData(EditedGroup, FConfig.Nodes);
 
-    if Dlg.ShowModal = mrOk then
+    if Dlg.ShowModal = mrOK then
     begin
       if Dlg.ValidateInput then
       begin
@@ -748,17 +677,16 @@ end;
 
 procedure TSettingsForm.btnDeleteGroupClick(Sender: TObject);
 var
-  SelIndex: integer;
-  I: integer;
+  SelIndex: Integer;
+  I: Integer;
 begin
   if GroupsList.Selected = nil then Exit;
 
   SelIndex := GroupsList.Selected.Index;
   if (SelIndex < 0) or (SelIndex > High(FConfig.Groups)) then Exit;
 
-  if MessageDlg(_('title_confirm'), Format(_('confirm_delete_group'),
-    [FConfig.Groups[SelIndex].Name]), mtConfirmation,
-    [mbYes, mbNo], 0) = mrYes then
+  if MessageDlg(_('title_confirm'), Format(_('confirm_delete_group'), [FConfig.Groups[SelIndex].Name]),
+                mtConfirmation, [mbYes, mbNo], 0) = mrYes then
   begin
     for I := SelIndex to High(FConfig.Groups) - 1 do
       FConfig.Groups[I] := FConfig.Groups[I + 1];
@@ -772,45 +700,51 @@ end;
 procedure TSettingsForm.btnApplyClick(Sender: TObject);
 var
   ErrorMsg: string;
-  Idx: integer;
+  Idx: Integer;
   LangInfo: TLanguageInfo;
   LangCode: string;
+  Validator: TConfigManager;
+  OldConfig: TAppConfig;
+  Balloon: Integer;
 begin
   SettingsDebugLog('btnApplyClick - applying config');
   // Use external ConfigManager if assigned, otherwise create new
   if Assigned(FConfigManager) then
   begin
-    FConfigManager.SetConfig(FConfig);
-
-    if not FConfigManager.ValidateConfig(ErrorMsg) then
-    begin
-      SettingsDebugLog('Validation failed: ' + ErrorMsg);
-      MessageDlg(_('title_error'), ErrorMsg, mtError, [mbOK], 0);
-      Exit;
+    Validator := TConfigManager.Create('');
+    try
+      Validator.SetConfig(FConfig);
+      if not Validator.ValidateConfig(ErrorMsg) then
+      begin
+        MessageDlg(_('title_error'), ErrorMsg, mtError, [mbOK], 0);
+        Exit;
+      end;
+    finally
+      Validator.Free;
     end;
-
-    // Save current language selection
+    LangCode := LangMgr.CurrentLanguage;
     Idx := cbSelectLanguage.ItemIndex;
     if Idx >= 0 then
     begin
       LangInfo := LangMgr.GetLanguageInfo(Idx);
       LangCode := LangInfo.Code;
-
-      // Apply language
-      LangMgr.SetLanguage(LangCode);
-      FConfigManager.SetLanguage(LangCode);
-
-      // Update tray menu
-      if Assigned(FOnLanguageChanged) then
-        FOnLanguageChanged(Self);
     end;
-
-    // Сохраняем состояние чекбокса balloon hint
-    if Assigned(cbBaloonHint) then
-      FConfigManager.SetBalloonHintEnabled(cbBaloonHint.Checked);
-
-    SettingsDebugLog('Saving config');
-    FConfigManager.SaveConfig;
+    Balloon := -1;
+    if Assigned(cbBaloonHint) then Balloon := Ord(cbBaloonHint.Checked);
+    OldConfig := FConfigManager.GetConfig;
+    FConfigManager.SetConfig(FConfig);
+    try
+      FConfigManager.SaveConfig(LangCode, Balloon);
+    except
+      on E: Exception do
+      begin
+        FConfigManager.SetConfig(OldConfig);
+        MessageDlg(_('title_error'), E.Message, mtError, [mbOK], 0);
+        Exit;
+      end;
+    end;
+    LangMgr.SetLanguage(LangCode);
+    if Assigned(FOnLanguageChanged) then FOnLanguageChanged(Self);
 
     if Assigned(FOnApply) then
     begin
@@ -819,7 +753,7 @@ begin
     end;
 
     FModified := False;
-    ModalResult := mrOk;
+    ModalResult := mrOK;
     SettingsDebugLog('Apply done');
   end;
 end;
@@ -835,10 +769,12 @@ var
   OpenDlg: TOpenDialog;
   ConfigMgr: TConfigManager;
   ErrorMsg: string;
+  I: Integer;
+  LangInfo: TLanguageInfo;
 begin
   OpenDlg := TOpenDialog.Create(nil);
   try
-    OpenDlg.Filter := 'Configuration Files (*.ini)|*.ini|All Files (*.*)|*.*';
+    OpenDlg.Filter := _('filter_config_files');
     OpenDlg.DefaultExt := 'ini';
 
     if OpenDlg.Execute then
@@ -848,11 +784,19 @@ begin
         if ConfigMgr.ImportConfig(OpenDlg.FileName, ErrorMsg) then
         begin
           FConfig := ConfigMgr.GetConfig;
+          LoadDiagnostics;
+          if Assigned(FConfigManager) then FConfig.Version := FConfigManager.GetVersion;
+          cbBaloonHint.Checked := ConfigMgr.GetBalloonHintEnabled;
+          for I := 0 to LangMgr.GetLanguageCount - 1 do
+          begin
+            LangInfo := LangMgr.GetLanguageInfo(I);
+            if SameText(LangInfo.Code, ConfigMgr.GetLanguage) then
+              cbSelectLanguage.ItemIndex := I;
+          end;
           RefreshNodesList;
           RefreshGroupsList;
           FModified := True;
-          MessageDlg(_('title_success'), _('msg_import_success'),
-            mtInformation, [mbOK], 0);
+          MessageDlg(_('title_success'), _('msg_import_success'), mtInformation, [mbOK], 0);
         end
         else
         begin
@@ -874,7 +818,7 @@ var
 begin
   SaveDlg := TSaveDialog.Create(nil);
   try
-    SaveDlg.Filter := 'Configuration Files (*.ini)|*.ini|All Files (*.*)|*.*';
+    SaveDlg.Filter := _('filter_config_files');
     SaveDlg.DefaultExt := 'ini';
 
     if SaveDlg.Execute then
@@ -883,8 +827,7 @@ begin
       try
         ConfigMgr.SetConfig(FConfig);
         ConfigMgr.ExportConfig(SaveDlg.FileName);
-        MessageDlg(_('title_success'), _('msg_export_success'),
-          mtInformation, [mbOK], 0);
+        MessageDlg(_('title_success'), _('msg_export_success'), mtInformation, [mbOK], 0);
       finally
         ConfigMgr.Free;
       end;
@@ -896,7 +839,7 @@ end;
 
 procedure TSettingsForm.GroupsListItemChecked(Sender: TObject; Item: TListItem);
 var
-  Idx: integer;
+  Idx: Integer;
 begin
   if FLoading then Exit;
 
@@ -906,11 +849,6 @@ begin
     FConfig.Groups[Idx].Enabled := Item.Checked;
     FModified := True;
   end;
-end;
-
-procedure TSettingsForm.MacrosHintPanelClick(Sender: TObject);
-begin
-
 end;
 
 end.
