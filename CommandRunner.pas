@@ -12,12 +12,22 @@ type
     GroupName: string;
   end;
 
+  TCommandWorker = class(TThread)
+  private
+    FJob: TCommandJob;
+    procedure RunJob(const Job: TCommandJob);
+  protected
+    procedure Execute; override;
+  public
+    constructor Create(const Job: TCommandJob);
+  end;
+
   TCommandRunner = class(TThread)
   private
     FLock: TRTLCriticalSection;
     FWake: TEvent;
-    FQueue: array of TCommandJob;
-    procedure RunJob(const Job: TCommandJob);
+    FWorkers: TFPList;
+    procedure StartCommand(const Node: TNodeConfig; const GroupName: string);
   protected
     procedure Execute; override;
   public
@@ -123,6 +133,7 @@ begin
   inherited Create(True);
   FreeOnTerminate := False;
   InitCriticalSection(FLock);
+  FWorkers := TFPList.Create;
   FWake := TEvent.Create(nil, True, False, '');
   Start;
 end;
@@ -134,34 +145,47 @@ begin
   if Suspended then Start;
   WaitFor;
   FreeAndNil(FWake);
+  FreeAndNil(FWorkers);
   DoneCriticalSection(FLock);
   inherited Destroy;
 end;
 
 procedure TCommandRunner.Enqueue(const Node: TNodeConfig; const GroupName: string);
-var Index: Integer; StateNode: TNodeConfig;
+var StateNode: TNodeConfig;
 begin
   StateNode := Node;
   StateNode.Command := '';
   if Node.State = nsUp then StateNode.Command := Node.UpCommand;
   if Node.State = nsDown then StateNode.Command := Node.DownCommand;
-  StateNode.UpCommand := '';
-  StateNode.DownCommand := '';
-  if Trim(StateNode.Command) <> '' then Enqueue(StateNode, GroupName);
+  StartCommand(StateNode, GroupName);
+  StartCommand(Node, GroupName);
+end;
+
+procedure TCommandRunner.StartCommand(const Node: TNodeConfig; const GroupName: string);
+var Job: TCommandJob; Worker: TCommandWorker;
+begin
   if Trim(Node.Command) = '' then Exit;
   EnterCriticalSection(FLock);
   try
     if Terminated then Exit;
-    // Limit memory growth when an external program is slow.
-    if Length(FQueue) >= 4096 then
+    // No waiting queue: every accepted command starts independently.
+    if FWorkers.Count >= 256 then
     begin
-      ApplicationLog('multiPingLed: command queue full');
+      ApplicationLog('multiPingLed: simultaneous command limit reached');
       Exit;
     end;
-    Index := Length(FQueue);
-    SetLength(FQueue, Index + 1);
-    FQueue[Index].Node := Node;
-    FQueue[Index].GroupName := GroupName;
+    Job.Node := Node;
+    Job.GroupName := GroupName;
+    Worker := TCommandWorker.Create(Job);
+    try
+      FWorkers.Add(Worker);
+      Worker.Start;
+    except
+      FWorkers.Remove(Worker);
+      Worker.Terminate;
+      Worker.Free;
+      raise;
+    end;
     FWake.SetEvent;
   finally
     LeaveCriticalSection(FLock);
@@ -169,38 +193,66 @@ begin
 end;
 
 procedure TCommandRunner.Execute;
-var Job: TCommandJob; HaveJob: Boolean; I: Integer;
+var FinishedWorkers: TFPList; I: Integer; Worker: TCommandWorker;
 begin
-  while not Terminated do
-  begin
+  FinishedWorkers := TFPList.Create;
+  try
+    while not Terminated do
+    begin
+      EnterCriticalSection(FLock);
+      try
+        for I := FWorkers.Count - 1 downto 0 do
+          if TCommandWorker(FWorkers[I]).Finished then
+          begin
+            FinishedWorkers.Add(FWorkers[I]);
+            FWorkers.Delete(I);
+          end;
+        FWake.ResetEvent;
+      finally
+        LeaveCriticalSection(FLock);
+      end;
+      for I := 0 to FinishedWorkers.Count - 1 do
+        TObject(FinishedWorkers[I]).Free;
+      FinishedWorkers.Clear;
+      if not Terminated then FWake.WaitFor(100);
+    end;
+    // Signal every worker before joining any of them.
     EnterCriticalSection(FLock);
     try
-      HaveJob := Length(FQueue) > 0;
-      if HaveJob then
-      begin
-        Job := FQueue[0];
-        for I := 1 to High(FQueue) do FQueue[I - 1] := FQueue[I];
-        SetLength(FQueue, Length(FQueue) - 1);
-      end;
-      // Reset under the queue lock to avoid losing an enqueue signal.
-      FWake.ResetEvent;
+      for I := 0 to FWorkers.Count - 1 do
+        TCommandWorker(FWorkers[I]).Terminate;
     finally
       LeaveCriticalSection(FLock);
     end;
-    if HaveJob then
+    for I := 0 to FWorkers.Count - 1 do
     begin
-      try
-        RunJob(Job);
-      except
-        on E: Exception do ApplicationLog('multiPingLed: command failed: ' + E.Message);
-      end;
-      Job := Default(TCommandJob);
-    end
-    else if not Terminated then FWake.WaitFor(INFINITE);
+      Worker := TCommandWorker(FWorkers[I]);
+      Worker.WaitFor;
+      Worker.Free;
+    end;
+    FWorkers.Clear;
+  finally
+    FinishedWorkers.Free;
   end;
 end;
 
-procedure TCommandRunner.RunJob(const Job: TCommandJob);
+constructor TCommandWorker.Create(const Job: TCommandJob);
+begin
+  inherited Create(True);
+  FreeOnTerminate := False;
+  FJob := Job;
+end;
+
+procedure TCommandWorker.Execute;
+begin
+  try
+    RunJob(FJob);
+  except
+    on E: Exception do ApplicationLog('multiPingLed: command failed: ' + E.Message);
+  end;
+end;
+
+procedure TCommandWorker.RunJob(const Job: TCommandJob);
 var
   Args: TStringList;
   Proc: ProcessUnicode.TProcess;

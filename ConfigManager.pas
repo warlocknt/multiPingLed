@@ -29,6 +29,7 @@ type
     State: TNodeState;
     LastPingTime: TDateTime;
     LastPingMs: Integer;
+    LastPingError: string; // Runtime only; never persisted to INI.
     // Внешняя команда при смене статуса (единая строка: путь + параметры)
     Command: string;
     DownCommand: string;
@@ -81,7 +82,7 @@ type
     procedure SetConfig(const Config: TAppConfig);
     function ValidateConfig(out ErrorMsg: string): Boolean;
     function ImportConfig(const FileName: string; out ErrorMsg: string): Boolean;
-    procedure ExportConfig(const FileName: string);
+    procedure ExportConfig(const FileName: string; const Language: string = ''; BalloonHint: Integer = -1);
     
     // Language settings
     function GetLanguage: string;
@@ -96,6 +97,8 @@ function ResolveAppConfigPath: string; overload;
 function ResolveAppConfigPath(const ExeDirectory, RoamingDirectory: string): string; overload;
 
 function CloneConfig(const Config: TAppConfig): TAppConfig;
+
+function SameEditableConfig(const A, B: TAppConfig): Boolean;
 
 implementation
 
@@ -114,6 +117,31 @@ begin
   Result := ResolveAppConfigPath(ExtractFilePath(ParamStr(0)), SysUtils.GetEnvironmentVariable('APPDATA'));
 end;
 
+
+function SameEditableConfig(const A, B: TAppConfig): Boolean;
+var I, J: Integer;
+begin
+  Result := False;
+  if (A.LoggingEnabled <> B.LoggingEnabled) or (A.ComparePingEnabled <> B.ComparePingEnabled) or
+    (A.CreateSessionReport <> B.CreateSessionReport) or (Length(A.Nodes) <> Length(B.Nodes)) or
+    (Length(A.Groups) <> Length(B.Groups)) then Exit;
+  for I := 0 to High(A.Nodes) do
+    if (A.Nodes[I].Id <> B.Nodes[I].Id) or (A.Nodes[I].Name <> B.Nodes[I].Name) or
+      (A.Nodes[I].Host <> B.Nodes[I].Host) or (A.Nodes[I].IntervalMs <> B.Nodes[I].IntervalMs) or
+      (A.Nodes[I].TimeoutMs <> B.Nodes[I].TimeoutMs) or (A.Nodes[I].FailThreshold <> B.Nodes[I].FailThreshold) or
+      (A.Nodes[I].NotificationsMuted <> B.Nodes[I].NotificationsMuted) or
+      (A.Nodes[I].Command <> B.Nodes[I].Command) or (A.Nodes[I].UpCommand <> B.Nodes[I].UpCommand) or
+      (A.Nodes[I].DownCommand <> B.Nodes[I].DownCommand) then Exit;
+  for I := 0 to High(A.Groups) do
+  begin
+    if (A.Groups[I].Id <> B.Groups[I].Id) or (A.Groups[I].Name <> B.Groups[I].Name) or
+      (A.Groups[I].GroupType <> B.Groups[I].GroupType) or (A.Groups[I].Enabled <> B.Groups[I].Enabled) or
+      (Length(A.Groups[I].NodeIds) <> Length(B.Groups[I].NodeIds)) then Exit;
+    for J := 0 to High(A.Groups[I].NodeIds) do
+      if A.Groups[I].NodeIds[J] <> B.Groups[I].NodeIds[J] then Exit;
+  end;
+  Result := True;
+end;
 
 function CloneConfig(const Config: TAppConfig): TAppConfig;
 var I: Integer;
@@ -392,6 +420,12 @@ begin
         end;
         if FConfig.Groups[I].NodeIds[J] > 0 then
         begin
+          if ((FConfig.Groups[I].GroupType = gtSingle) and (J >= 1)) or
+            ((FConfig.Groups[I].GroupType = gt2x2) and (J >= 4)) then
+          begin
+            ErrorMsg := Format(_('error_group_node_limit'), [FConfig.Groups[I].Id]);
+            Exit;
+          end;
           Inc(GroupNodeCount);
           
           NodeIdFound := False;
@@ -509,7 +543,8 @@ begin
           DelimitedText := NodeIdsStr;
           SetLength(TempConfig.Groups[I].NodeIds, Count);
           for J := 0 to Count - 1 do
-            TempConfig.Groups[I].NodeIds[J] := StrToIntDef(Strings[J], 0);
+            if not TryStrToInt(Strings[J], TempConfig.Groups[I].NodeIds[J]) then
+              raise EConvertError.Create(Format(_('error_invalid_node_id'), [Strings[J]]));
         finally
           Free;
         end;
@@ -538,7 +573,7 @@ begin
   end;
 end;
 
-procedure TConfigManager.ExportConfig(const FileName: string);
+procedure TConfigManager.ExportConfig(const FileName: string; const Language: string; BalloonHint: Integer);
 var
   Ini: TIniFile;
   I, J: Integer;
@@ -550,8 +585,10 @@ begin
     Ini.WriteBool('General', 'LoggingEnabled', FConfig.LoggingEnabled);
     Ini.WriteBool('General', 'ComparePingEnabled', FConfig.ComparePingEnabled);
     Ini.WriteBool('General', 'CreateSessionReport', FConfig.CreateSessionReport);
-    Ini.WriteString('General', 'Language', GetLanguage);
-    Ini.WriteString('General', 'BalloonHintEnabled', BoolToStrEx(GetBalloonHintEnabled));
+    if Language <> '' then Ini.WriteString('General', 'Language', Language)
+    else Ini.WriteString('General', 'Language', GetLanguage);
+    if BalloonHint >= 0 then Ini.WriteString('General', 'BalloonHintEnabled', BoolToStrEx(BalloonHint <> 0))
+    else Ini.WriteString('General', 'BalloonHintEnabled', BoolToStrEx(GetBalloonHintEnabled));
     Ini.WriteInteger('General', 'NodeCount', Length(FConfig.Nodes));
     Ini.WriteInteger('General', 'GroupCount', Length(FConfig.Groups));
     

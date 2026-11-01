@@ -1,4 +1,4 @@
-unit GroupEditForm;
+﻿unit GroupEditForm;
 
 {$mode objfpc}{$H+}
 
@@ -101,37 +101,40 @@ begin
 end;
 
 function TGroupEditForm.GetData: TNodeGroup;
-var
-  I, Count: Integer;
-begin
-  Result := FGroup;
-  Result.Name := Trim(edName.Text);
-
-  case cbType.ItemIndex of
-    0: Result.GroupType := gtSingle;
-    1: Result.GroupType := gt2x2;
-    2: Result.GroupType := gt3x3;
-  end;
-
-  // Count selected nodes first
-  Count := 0;
-  for I := 0 to clbNodes.Count - 1 do
-    if clbNodes.Checked[I] then
-      Inc(Count);
-
-  // Set array size based on actual selected count
-  SetLength(Result.NodeIds, Count);
-
-  // Fill array with selected node IDs
-  Count := 0;
-  for I := 0 to clbNodes.Count - 1 do
+var I, J, Slot, Capacity, KeepLength: Integer;
+  function Selected(Id: Integer): Boolean;
+  var K: Integer;
   begin
+    for K := 0 to High(FAllNodes) do
+      if FAllNodes[K].Id = Id then Exit(clbNodes.Checked[K]);
+    Result := False;
+  end;
+begin
+  Result := FGroup; Result.Name := Trim(edName.Text);
+  case cbType.ItemIndex of
+    0: begin Result.GroupType := gtSingle; Capacity := 1; end;
+    1: begin Result.GroupType := gt2x2; Capacity := 4; end;
+  else begin Result.GroupType := gt3x3; Capacity := 9; end; end;
+  Result.NodeIds := nil; SetLength(Result.NodeIds, Capacity);
+  KeepLength := Length(FGroup.NodeIds);
+  if KeepLength > Capacity then KeepLength := Capacity;
+  // Preserve occupied positions, including holes between existing hosts.
+  for I := 0 to KeepLength - 1 do
+    if (FGroup.NodeIds[I] > 0) and Selected(FGroup.NodeIds[I]) then
+      Result.NodeIds[I] := FGroup.NodeIds[I];
+  for I := 0 to High(FAllNodes) do
     if clbNodes.Checked[I] then
     begin
-      Result.NodeIds[Count] := FAllNodes[I].Id;
-      Inc(Count);
+      J := 0;
+      while (J < Capacity) and (Result.NodeIds[J] <> FAllNodes[I].Id) do Inc(J);
+      if J < Capacity then Continue;
+      Slot := 0;
+      while (Slot < Capacity) and (Result.NodeIds[Slot] <> 0) do Inc(Slot);
+      if Slot >= Capacity then Continue;
+      Result.NodeIds[Slot] := FAllNodes[I].Id;
+      if KeepLength <= Slot then KeepLength := Slot + 1;
     end;
-  end;
+  SetLength(Result.NodeIds, KeepLength);
 end;
 
 procedure TGroupEditForm.UpdateCounter;
@@ -139,13 +142,9 @@ var
   Count, MinCount, MaxCount: Integer;
 begin
   Count := GetSelectedCount;
-  case Count of
-    1: cbType.ItemIndex := 0;
-    2..4: cbType.ItemIndex := 1;
-    5..9: cbType.ItemIndex := 2;
-    else
-      cbType.ItemIndex := 2;
-  end;
+  // Grow automatically when necessary; never shrink an existing grid on a rename.
+  if Count > GetRequiredCount then
+    if Count <= 4 then cbType.ItemIndex := 1 else cbType.ItemIndex := 2;
 
   MinCount := GetMinCount;
   MaxCount := GetRequiredCount;
@@ -162,8 +161,8 @@ function TGroupEditForm.GetRequiredCount: Integer;
 begin
   case cbType.ItemIndex of
     0: Result := 1;
-    1: Result := 4;  // 2x2: max 4, min 2
-    2: Result := 9;  // 3x3: max 9, min 5
+    1: Result := 4;  // 2x2: max 4, min 1
+    2: Result := 9;  // 3x3: max 9, min 1
   else
     Result := 0;
   end;
@@ -171,13 +170,7 @@ end;
 
 function TGroupEditForm.GetMinCount: Integer;
 begin
-  case cbType.ItemIndex of
-    0: Result := 1;
-    1: Result := 2;  // 2x2: min 2
-    2: Result := 5;  // 3x3: min 5
-  else
-    Result := 0;
-  end;
+  Result := 1;
 end;
 
 function TGroupEditForm.GetSelectedCount: Integer;

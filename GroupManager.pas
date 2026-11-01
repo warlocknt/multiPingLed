@@ -1,4 +1,4 @@
-unit GroupManager;
+﻿unit GroupManager;
 
 {$mode objfpc}{$H+}
 
@@ -14,6 +14,7 @@ type
     GroupType: ConfigManager.TGroupType;
     NodeIds: array of Integer;
     NodeStates: array of ConfigManager.TNodeState;
+    NodeHosts: array of string;
   end;
   
   TGroupArray = array of TGroupInfo;
@@ -22,6 +23,7 @@ type
   private
     FGroups: TGroupArray;
     FNodeManager: TNodeManager;
+    FCommandsEnabled: Boolean;
     FCriticalSection: TRTLCriticalSection;
     FLastExecutedStates: array of array of ConfigManager.TNodeState;  // Для отслеживания выполненных команд
     procedure OnNodeStateChange(Sender: TObject);
@@ -29,7 +31,8 @@ type
   public
     constructor Create;
     destructor Destroy; override;
-    procedure ApplyConfig(const Groups: array of TNodeGroup; NodeManager: TNodeManager);
+    procedure ApplyConfig(const Groups: array of TNodeGroup; NodeManager: TNodeManager; ExecuteCommands: Boolean = True);
+    procedure EnableCommands;
     function GetGroups: TGroupArray;
     function GetGroupById(Id: Integer): TGroupInfo;
   end;
@@ -58,7 +61,7 @@ begin
   inherited Destroy;
 end;
 
-procedure TGroupManager.ApplyConfig(const Groups: array of TNodeGroup; NodeManager: TNodeManager);
+procedure TGroupManager.ApplyConfig(const Groups: array of TNodeGroup; NodeManager: TNodeManager; ExecuteCommands: Boolean);
 var
   I, J: Integer;
   GroupCount: Integer;
@@ -70,6 +73,7 @@ begin
   EnterCriticalSection(FCriticalSection);
   try
     FNodeManager := NodeManager;
+    FCommandsEnabled := ExecuteCommands;
 
     OldGroups := FGroups;
     OldStates := FLastExecutedStates;
@@ -101,6 +105,7 @@ begin
 
       SetLength(FGroups[I].NodeIds, ArraySize);
       SetLength(FGroups[I].NodeStates, ArraySize);
+      SetLength(FGroups[I].NodeHosts, ArraySize);
       SetLength(FLastExecutedStates[I], ArraySize);
 
       for J := 0 to ArraySize - 1 do
@@ -110,10 +115,14 @@ begin
         else
           FGroups[I].NodeIds[J] := 0;
         FGroups[I].NodeStates[J] := nsUnknown;
+        if FNodeManager <> nil then
+          FGroups[I].NodeHosts[J] := FNodeManager.GetNodeById(FGroups[I].NodeIds[J]).Host;
         for K := 0 to High(OldGroups) do
           if OldGroups[K].Id = FGroups[I].Id then
             for L := 0 to High(OldGroups[K].NodeIds) do
               if (OldGroups[K].NodeIds[L] = FGroups[I].NodeIds[J]) and
+                (L < Length(OldGroups[K].NodeHosts)) and
+                (OldGroups[K].NodeHosts[L] = FGroups[I].NodeHosts[J]) and
                 (K < Length(OldStates)) and (L < Length(OldStates[K])) then
                 FLastExecutedStates[I][J] := OldStates[K][L];
       end;
@@ -125,6 +134,14 @@ begin
   // Subscription refreshes under NodeManager's event lock, closing the gap
   // between the initial snapshot and the first worker notification.
   if FNodeManager <> nil then FNodeManager.OnStateChange := @OnNodeStateChange;
+end;
+
+procedure TGroupManager.EnableCommands;
+begin
+  EnterCriticalSection(FCriticalSection);
+  try FCommandsEnabled := True;
+  finally LeaveCriticalSection(FCriticalSection); end;
+  UpdateGroupStates;
 end;
 
 procedure TGroupManager.OnNodeStateChange(Sender: TObject);
@@ -147,7 +164,8 @@ begin
       begin
         Node := FNodeManager.GetNodeById(FGroups[I].NodeIds[J]);
         FGroups[I].NodeStates[J] := Node.State;
-        if Node.Id > 0 then
+        FGroups[I].NodeHosts[J] := Node.Host;
+        if FCommandsEnabled and (Node.Id > 0) then
           if FLastExecutedStates[I][J] <> Node.State then
           begin
             FLastExecutedStates[I][J] := Node.State;
@@ -171,6 +189,7 @@ begin
     begin
       Result[I].NodeIds := Copy(FGroups[I].NodeIds, 0, Length(FGroups[I].NodeIds));
       Result[I].NodeStates := Copy(FGroups[I].NodeStates, 0, Length(FGroups[I].NodeStates));
+      Result[I].NodeHosts := Copy(FGroups[I].NodeHosts);
     end;
   finally
     LeaveCriticalSection(FCriticalSection);
@@ -190,6 +209,7 @@ begin
         Result := FGroups[I];
         Result.NodeIds := Copy(FGroups[I].NodeIds, 0, Length(FGroups[I].NodeIds));
         Result.NodeStates := Copy(FGroups[I].NodeStates, 0, Length(FGroups[I].NodeStates));
+        Result.NodeHosts := Copy(FGroups[I].NodeHosts);
         Exit;
       end;
     end;

@@ -11,13 +11,14 @@ type
   private
     FHost, FAddress, FOutput: string;
     FTimeout: Integer;
+    FCancelEvent: THandle;
     FStarted: TDateTime;
     FExitCode: DWORD;
     FElapsed: QWord;
   protected
     procedure Execute; override;
   public
-    constructor Create(const Host, Address: string; Timeout: Integer);
+    constructor Create(const Host, Address: string; Timeout: Integer; CancelEvent: THandle = 0);
     procedure Finish(Success: Boolean; RTT: Integer; const ErrorText: string);
   end;
 
@@ -32,13 +33,14 @@ begin
   Result := ComparisonLoggingEnabled;
 end;
 
-constructor TPingComparison.Create(const Host, Address: string; Timeout: Integer);
+constructor TPingComparison.Create(const Host, Address: string; Timeout: Integer; CancelEvent: THandle);
 begin
   inherited Create(True);
   FreeOnTerminate := False;
   FHost := Host;
   FAddress := Address;
   FTimeout := Timeout;
+  FCancelEvent := CancelEvent;
   FStarted := Now;
   FExitCode := DWORD(-1);
   Start;
@@ -97,10 +99,11 @@ begin
             Move(Buffer[0], FOutput[Available + 1], Count);
           end;
         end;
-        if not Done and (GetTickCount64 - Started > QWord(FTimeout) + 3000) then
+        if not Done and (((FCancelEvent <> 0) and (WaitForSingleObject(FCancelEvent, 0) = WAIT_OBJECT_0)) or
+          (GetTickCount64 - Started > QWord(FTimeout) + 3000)) then
         begin
           TerminateProcess(PI.hProcess, 255);
-          WaitForSingleObject(PI.hProcess, INFINITE);
+          WaitForSingleObject(PI.hProcess, 1000);
           FOutput := FOutput + LineEnding + '[diagnostic watchdog timeout]';
           Done := True;
         end;
@@ -115,7 +118,7 @@ begin
       if WaitForSingleObject(PI.hProcess, 0) <> WAIT_OBJECT_0 then
       begin
         TerminateProcess(PI.hProcess, 255);
-        WaitForSingleObject(PI.hProcess, INFINITE);
+        WaitForSingleObject(PI.hProcess, 1000);
       end;
       CloseHandle(PI.hProcess);
     end;

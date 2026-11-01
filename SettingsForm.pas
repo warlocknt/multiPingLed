@@ -6,11 +6,15 @@ interface
 
 uses
   Classes, SysUtils, Forms, Controls, Graphics, StdCtrls, ExtCtrls, Dialogs,
-  ComCtrls, Menus, ConfigManager, NodeEditForm, GroupEditForm, LangManager;
+  ComCtrls, Menus, FGL, NodeManager, ConfigManager, NodeEditForm, GroupEditForm, LangManager;
 
 type
 
   { TSettingsForm }
+
+  TApplyConfiguration = procedure(Sender: TObject; Persist: TNotifyEvent) of object;
+  TMonitoringRows = specialize TFPGMap<Integer, TListItem>;
+  TSnapshotIndex = specialize TFPGMap<Integer, Integer>;
 
   TSettingsForm = class(TForm)
     cbLogging: TCheckBox;
@@ -44,7 +48,11 @@ type
     btnApply: TButton;
     btnCancel: TButton;
     SettingsFormButtonsPanel: TPanel;
-    TabSheet1: TTabSheet;
+    SettingsTab: TTabSheet;
+    MonitoringTab: TTabSheet;
+    MonitoringList: TListView;
+    MonitoringLegend: TLabel;
+    MonitoringTimer: TTimer;
 
     procedure DiagnosticsChanged(Sender: TObject);
     procedure FormCreate(Sender: TObject);
@@ -64,12 +72,32 @@ type
     procedure NodesListSelectItem(Sender: TObject; Item: TListItem; Selected: Boolean);
     procedure GroupsListSelectItem(Sender: TObject; Item: TListItem; Selected: Boolean);
   private
+    FBaseline: TAppConfig;
+    FBaselineLanguage: string;
+    FBaselineBalloon: Boolean;
+    FRows: TMonitoringRows;
+    FSnapshotIndex: TSnapshotIndex;
+    FNodeManager: TNodeManager;
+    FMonitoring: TMonitoringSnapshot;
     FConfig: TAppConfig;
-    FOnApply: TNotifyEvent;
+    FPendingLanguage: string;
+    FPendingPersisted: Boolean;
+    FOnApply: TApplyConfiguration;
     FOnLanguageChanged: TNotifyEvent;
     FConfigManager: TConfigManager;
     FModified: Boolean;
     FLoading: Boolean;
+    procedure PersistPending(Sender: TObject);
+    procedure SetConfigManager(Value: TConfigManager);
+    function SelectedLanguage: string;
+    procedure PreferenceChanged(Sender: TObject);
+    procedure UpdateMonitoringHint;
+    procedure MonitoringTick(Sender: TObject);
+    procedure MonitoringPageChanged(Sender: TObject);
+    procedure MonitoringMouseMove(Sender: TObject; Shift: TShiftState; X, Y: Integer);
+    procedure MonitoringDrawSubItem(Sender: TCustomListView; Item: TListItem;
+      SubItem: Integer; State: TCustomDrawState; var DefaultDraw: Boolean);
+
 
     procedure SetupEvents;
     procedure LoadDiagnostics;
@@ -84,10 +112,17 @@ type
     procedure eCommandChange(Sender: TObject);
     procedure LoadLanguageSelector;
   public
+    destructor Destroy; override;
+    procedure UpdateApplyState;
+    function TryApplyConfig(out ErrorText: string): Boolean;
+    procedure ExportDraft(const FileName: string);
     procedure SetConfig(const Config: TAppConfig);
-    property OnApply: TNotifyEvent read FOnApply write FOnApply;
+    procedure RefreshMonitoring;
+    procedure OpenPage(Monitoring: Boolean);
+    property NodeManager: TNodeManager read FNodeManager write FNodeManager;
+    property OnApply: TApplyConfiguration read FOnApply write FOnApply;
     property OnLanguageChanged: TNotifyEvent read FOnLanguageChanged write FOnLanguageChanged;
-    property ConfigManager: TConfigManager read FConfigManager write FConfigManager;
+    property ConfigManager: TConfigManager read FConfigManager write SetConfigManager;
   end;
 
 implementation
@@ -101,16 +136,183 @@ begin
   ApplicationLog('multiPingLed[Settings]: ' + Msg);
 end;
 
+procedure TSettingsForm.OpenPage(Monitoring: Boolean);
+begin
+  if Monitoring then PageControl.ActivePage := MonitoringTab
+  else PageControl.ActivePage := SettingsTab;
+  MonitoringPageChanged(Self);
+end;
+
+procedure TSettingsForm.MonitoringPageChanged(Sender: TObject);
+begin
+  MonitoringTimer.Enabled := Visible and (PageControl.ActivePage = MonitoringTab);
+  if PageControl.ActivePage = MonitoringTab then RefreshMonitoring;
+end;
+
+procedure TSettingsForm.MonitoringTick(Sender: TObject);
+begin
+  if Visible and (PageControl.ActivePage = MonitoringTab) then RefreshMonitoring;
+end;
+
+procedure TSettingsForm.RefreshMonitoring;
+var I, J, K, Id: Integer; Item: TListItem; Values: array[0..4] of string; N: TNodeConfig;
+begin
+  if FNodeManager = nil then Exit;
+  FMonitoring := FNodeManager.GetMonitoringSnapshot;
+  FSnapshotIndex.Clear; FSnapshotIndex.Sorted := False;
+  for I := 0 to High(FMonitoring) do
+    if FMonitoring[I].Active then FSnapshotIndex.Add(FMonitoring[I].Node.Id, I);
+  FSnapshotIndex.Sorted := True;
+  MonitoringList.Items.BeginUpdate;
+  try
+    for J := MonitoringList.Items.Count - 1 downto 0 do
+    begin
+      Id := PtrUInt(MonitoringList.Items[J].Data);
+      if FSnapshotIndex.IndexOf(Id) < 0 then
+      begin
+        K := FRows.IndexOf(Id); if K >= 0 then FRows.Delete(K);
+        MonitoringList.Items.Delete(J);
+      end;
+    end;
+    for I := 0 to High(FMonitoring) do
+    begin
+      if not FMonitoring[I].Active then Continue;
+      N := FMonitoring[I].Node;
+      J := FRows.IndexOf(N.Id);
+      if J >= 0 then Item := FRows.Data[J]
+      else
+      begin
+        Item := MonitoringList.Items.Add;
+        Item.Data := Pointer(PtrUInt(N.Id));
+        for K := 0 to 4 do Item.SubItems.Add('');
+        FRows.Add(N.Id, Item);
+      end;
+      if Item.Caption <> N.Name then Item.Caption := N.Name;
+      Values[0] := N.Host;
+      case N.State of
+        nsUp: Values[1] := _('state_up');
+        nsDown: Values[1] := _('state_down');
+      else Values[1] := _('monitor_unknown'); end;
+      Values[2] := '-';
+      if (N.LastPingTime > 0) and (N.LastPingMs >= 0) then
+        Values[2] := IntToStr(N.LastPingMs) + ' ' + _('unit_ms');
+      Values[3] := IntToStr(N.ProbeLosses) + ' / ' + IntToStr(N.ProbeCount);
+      Values[4] := '-';
+      if N.LastStateChange > 0 then Values[4] := FormatDateTime('dd.mm hh:nn:ss', N.LastStateChange);
+      for K := 0 to 4 do
+        if Item.SubItems[K] <> Values[K] then Item.SubItems[K] := Values[K];
+    end;
+  finally MonitoringList.Items.EndUpdate; end;
+  UpdateMonitoringHint;
+end;
+
+procedure TSettingsForm.UpdateMonitoringHint;
+var P: TPoint;
+begin
+  P := MonitoringList.ScreenToClient(Mouse.CursorPos);
+  MonitoringMouseMove(MonitoringList, [], P.X, P.Y);
+end;
+
+procedure TSettingsForm.MonitoringMouseMove(Sender: TObject; Shift: TShiftState; X, Y: Integer);
+var Item: TListItem; I: Integer; HintText: string;
+begin
+  HintText := '';
+  Item := MonitoringList.GetItemAt(X, Y);
+  if Item <> nil then
+  begin
+    I := FSnapshotIndex.IndexOf(PtrUInt(Item.Data));
+    if I >= 0 then HintText := FMonitoring[FSnapshotIndex.Data[I]].Node.LastPingError;
+  end;
+  if MonitoringList.Hint <> HintText then
+  begin
+    Application.CancelHint;
+    MonitoringList.Hint := HintText;
+  end;
+end;
+
+procedure TSettingsForm.MonitoringDrawSubItem(Sender: TCustomListView; Item: TListItem;
+  SubItem: Integer; State: TCustomDrawState; var DefaultDraw: Boolean);
+var I: Integer;
+begin
+  DefaultDraw := True;
+  if cdsSelected in State then Exit;
+  Sender.Canvas.Font.Color := MonitoringList.Font.Color;
+  if SubItem <> 2 then Exit;
+  I := FSnapshotIndex.IndexOf(PtrUInt(Item.Data));
+  if I < 0 then Exit;
+  I := FSnapshotIndex.Data[I];
+  if not FMonitoring[I].Active then Sender.Canvas.Font.Color := clGray
+  else case FMonitoring[I].Node.State of
+    nsUp: Sender.Canvas.Font.Color := RGBToColor(47, 225, 119);
+    nsDown: Sender.Canvas.Font.Color := RGBToColor(245, 69, 83);
+  else Sender.Canvas.Font.Color := RGBToColor(129, 140, 155); end;
+end;
+
+procedure TSettingsForm.SetConfigManager(Value: TConfigManager);
+var WasLoading: Boolean;
+begin
+  FConfigManager := Value;
+  if Value <> nil then
+  begin
+    FBaseline := Value.GetConfig;
+    FBaselineLanguage := Value.GetLanguage;
+    FBaselineBalloon := Value.GetBalloonHintEnabled;
+    WasLoading := FLoading; FLoading := True;
+    try cbBaloonHint.Checked := FBaselineBalloon;
+    finally FLoading := WasLoading; end;
+  end;
+  UpdateApplyState;
+end;
+
+function TSettingsForm.SelectedLanguage: string;
+var Info: TLanguageInfo;
+begin
+  Result := FBaselineLanguage;
+  if cbSelectLanguage.ItemIndex >= 0 then
+  begin
+    Info := LangMgr.GetLanguageInfo(cbSelectLanguage.ItemIndex);
+    if Info.Code <> '' then Result := Info.Code;
+  end;
+end;
+
+procedure TSettingsForm.PreferenceChanged(Sender: TObject);
+begin
+  if not FLoading then UpdateApplyState;
+end;
+
+procedure TSettingsForm.UpdateApplyState;
+begin
+  if FLoading then Exit;
+  FModified := not SameEditableConfig(FConfig, FBaseline) or
+    (SelectedLanguage <> FBaselineLanguage) or (cbBaloonHint.Checked <> FBaselineBalloon);
+  btnApply.Enabled := FModified and (FConfigManager <> nil);
+end;
+
+destructor TSettingsForm.Destroy;
+begin
+  if MonitoringTimer <> nil then MonitoringTimer.Enabled := False;
+  FRows.Free;
+  FSnapshotIndex.Free;
+  inherited Destroy;
+end;
+
 procedure TSettingsForm.FormCreate(Sender: TObject);
 begin
+  FRows := TMonitoringRows.Create; FRows.Sorted := True;
+  FSnapshotIndex := TSnapshotIndex.Create; FSnapshotIndex.Sorted := True;
   SettingsDebugLog('FormCreate');
   FLoading := True;
   SetupEvents;
   FModified := False;
+  btnApply.Enabled := False;
   ApplyLocalization;
   FLoading := False;
   SettingsDebugLog('FormCreate done');
-  PageControl.TabIndex :=0 ;
+  PageControl.ActivePage := MonitoringTab;
+  PageControl.OnChange := @MonitoringPageChanged;
+  MonitoringTimer.OnTimer := @MonitoringTick;
+  MonitoringList.OnMouseMove := @MonitoringMouseMove;
+  MonitoringList.OnCustomDrawSubItem := @MonitoringDrawSubItem;
 end;
 
 procedure TSettingsForm.FormShow(Sender: TObject);
@@ -126,6 +328,8 @@ begin
   finally
     FLoading := False;
   end;
+  MonitoringPageChanged(Self);
+  UpdateApplyState;
 end;
 
 procedure TSettingsForm.LoadDiagnostics;
@@ -148,11 +352,12 @@ begin
   FConfig.LoggingEnabled := cbLogging.Checked;
   FConfig.ComparePingEnabled := cbPingComparison.Checked;
   FConfig.CreateSessionReport := cbSessionReport.Checked;
-  FModified := True;
+  UpdateApplyState;
 end;
 
 procedure TSettingsForm.SetupEvents;
 begin
+  cbBaloonHint.OnChange := @PreferenceChanged;
   // Events are bound in LFM, but we need to setup OnSelectItem handlers
   if Assigned(NodesList) then
     NodesList.OnSelectItem := @NodesListSelectItem;
@@ -205,7 +410,7 @@ begin
 
   
   // Just mark that language was changed - will be applied on Apply
-  FModified := True;
+  UpdateApplyState;
 end;
 
 procedure TSettingsForm.ApplyLocalization;
@@ -213,6 +418,14 @@ begin
   if not Assigned(LangMgr) then Exit;
   
   Caption := _('settings_title');
+  MonitoringTab.Caption := _('tab_monitoring');
+  MonitoringLegend.Caption := _('monitor_legend');
+  MonitoringList.Columns[0].Caption := _('column_name');
+  MonitoringList.Columns[1].Caption := _('column_host');
+  MonitoringList.Columns[2].Caption := _('monitor_status');
+  MonitoringList.Columns[3].Caption := _('monitor_latency');
+  MonitoringList.Columns[4].Caption := _('monitor_losses');
+  MonitoringList.Columns[5].Caption := _('monitor_changed');
   cbLogging.Caption := _('option_logging');
   cbSessionReport.Caption := _('option_session_report');
   cbPingComparison.Caption := _('option_ping_comparison');
@@ -269,15 +482,15 @@ begin
   if Assigned(btnApply) then
     btnApply.Caption := _('btn_apply');
   if Assigned(btnCancel) then
-    btnCancel.Caption := _('btn_cancel');
+    btnCancel.Caption := _('btn_discard_changes');
 
   // Language selector
   if Assigned(lLang) then
     lLang.Caption := _('label_language');
 
   // Settings tab (3rd tab)
-  if Assigned(TabSheet1) then
-    TabSheet1.Caption := _('tab_settings');
+  if Assigned(SettingsTab) then
+    SettingsTab.Caption := _('tab_settings');
   if Assigned(lCommandExec) then
     lCommandExec.Caption := _('label_command_on_change');
   if Assigned(cbBaloonHint) then
@@ -288,6 +501,15 @@ procedure TSettingsForm.SetConfig(const Config: TAppConfig);
 begin
   SettingsDebugLog('SetConfig: ' + IntToStr(Length(Config.Nodes)) + ' nodes, ' + IntToStr(Length(Config.Groups)) + ' groups');
   FConfig := CloneConfig(Config);
+  FBaseline := CloneConfig(Config);
+  FBaselineLanguage := LangMgr.CurrentLanguage;
+  FBaselineBalloon := True;
+  if FConfigManager <> nil then
+  begin
+    FBaseline := FConfigManager.GetConfig;
+    FBaselineLanguage := FConfigManager.GetLanguage;
+    FBaselineBalloon := FConfigManager.GetBalloonHintEnabled;
+  end;
   FLoading := True;
   try
     RefreshNodesList;
@@ -297,6 +519,7 @@ begin
   finally
     FLoading := False;
   end;
+  UpdateApplyState;
   SettingsDebugLog('SetConfig done');
 end;
 
@@ -416,7 +639,7 @@ procedure TSettingsForm.eCommandChange(Sender: TObject);
 begin
   if FLoading then Exit;
   SaveNodeCommandFields;
-  FModified := True;
+  UpdateApplyState;
 end;
 
 procedure TSettingsForm.GroupsListSelectItem(Sender: TObject; Item: TListItem; Selected: Boolean);
@@ -501,7 +724,7 @@ begin
       NewNode.Id := GetNextNodeId;
       FConfig.Nodes[NewIndex] := NewNode;
 
-      FModified := True;
+      UpdateApplyState;
       RefreshNodesList;
     end;
   finally
@@ -539,7 +762,7 @@ begin
     if Dlg.ShowModal = mrOK then
     begin
       FConfig.Nodes[SelIndex] := Dlg.GetData;
-      FModified := True;
+      UpdateApplyState;
       RefreshNodesList;
     end;
   finally
@@ -591,7 +814,7 @@ begin
       FConfig.Nodes[I] := FConfig.Nodes[I + 1];
     SetLength(FConfig.Nodes, Length(FConfig.Nodes) - 1);
 
-    FModified := True;
+    UpdateApplyState;
     RefreshNodesList;
   end;
 end;
@@ -633,7 +856,7 @@ begin
         NewGroup.Id := GetNextGroupId;
         FConfig.Groups[NewIndex] := NewGroup;
 
-        FModified := True;
+        UpdateApplyState;
         RefreshGroupsList;
       end;
     end;
@@ -666,7 +889,7 @@ begin
       if Dlg.ValidateInput then
       begin
         FConfig.Groups[SelIndex] := Dlg.GetData;
-        FModified := True;
+        UpdateApplyState;
         RefreshGroupsList;
       end;
     end;
@@ -692,76 +915,86 @@ begin
       FConfig.Groups[I] := FConfig.Groups[I + 1];
     SetLength(FConfig.Groups, Length(FConfig.Groups) - 1);
 
-    FModified := True;
+    UpdateApplyState;
     RefreshGroupsList;
   end;
 end;
 
-procedure TSettingsForm.btnApplyClick(Sender: TObject);
-var
-  ErrorMsg: string;
-  Idx: Integer;
-  LangInfo: TLanguageInfo;
-  LangCode: string;
-  Validator: TConfigManager;
-  OldConfig: TAppConfig;
-  Balloon: Integer;
+procedure TSettingsForm.PersistPending(Sender: TObject);
 begin
-  SettingsDebugLog('btnApplyClick - applying config');
-  // Use external ConfigManager if assigned, otherwise create new
-  if Assigned(FConfigManager) then
-  begin
-    Validator := TConfigManager.Create('');
-    try
-      Validator.SetConfig(FConfig);
-      if not Validator.ValidateConfig(ErrorMsg) then
-      begin
-        MessageDlg(_('title_error'), ErrorMsg, mtError, [mbOK], 0);
-        Exit;
-      end;
-    finally
-      Validator.Free;
-    end;
-    LangCode := LangMgr.CurrentLanguage;
-    Idx := cbSelectLanguage.ItemIndex;
-    if Idx >= 0 then
-    begin
-      LangInfo := LangMgr.GetLanguageInfo(Idx);
-      LangCode := LangInfo.Code;
-    end;
-    Balloon := -1;
-    if Assigned(cbBaloonHint) then Balloon := Ord(cbBaloonHint.Checked);
-    OldConfig := FConfigManager.GetConfig;
-    FConfigManager.SetConfig(FConfig);
-    try
-      FConfigManager.SaveConfig(LangCode, Balloon);
-    except
-      on E: Exception do
-      begin
-        FConfigManager.SetConfig(OldConfig);
-        MessageDlg(_('title_error'), E.Message, mtError, [mbOK], 0);
-        Exit;
-      end;
-    end;
-    LangMgr.SetLanguage(LangCode);
-    if Assigned(FOnLanguageChanged) then FOnLanguageChanged(Self);
+  FConfigManager.SaveConfig(FPendingLanguage, Ord(cbBaloonHint.Checked));
+  FPendingPersisted := True;
+end;
 
+function TSettingsForm.TryApplyConfig(out ErrorText: string): Boolean;
+var Validator: TConfigManager; OldConfig: TAppConfig;
+    LangCode, OldLanguage: string; OldBalloon: Integer; RuntimeAttempted: Boolean;
+begin
+  Result := False; ErrorText := '';
+  UpdateApplyState;
+  if (FConfigManager = nil) or not FModified then Exit(True);
+  Validator := TConfigManager.Create('');
+  try
+    Validator.SetConfig(FConfig);
+    if not Validator.ValidateConfig(ErrorText) then Exit;
+  finally Validator.Free; end;
+  LangCode := SelectedLanguage;
+  OldConfig := FConfigManager.GetConfig;
+  OldLanguage := FConfigManager.GetLanguage;
+  OldBalloon := Ord(FConfigManager.GetBalloonHintEnabled);
+  FPendingLanguage := LangCode; FPendingPersisted := False;
+  RuntimeAttempted := False;
+  FConfigManager.SetConfig(FConfig);
+  try
     if Assigned(FOnApply) then
     begin
-      SettingsDebugLog('Calling OnApply handler');
-      FOnApply(Self);
+      RuntimeAttempted := True;
+      FOnApply(Self, @PersistPending);
     end;
-
-    FModified := False;
-    ModalResult := mrOK;
-    SettingsDebugLog('Apply done');
+    if not FPendingPersisted then PersistPending(Self);
+  except
+    on E: Exception do
+    begin
+      ErrorText := E.Message;
+      FConfigManager.SetConfig(OldConfig);
+      if FPendingPersisted then
+        try FConfigManager.SaveConfig(OldLanguage, OldBalloon);
+        except on R: Exception do ErrorText := ErrorText + LineEnding + R.Message; end;
+      if RuntimeAttempted then
+        try FOnApply(Self, nil);
+        except on R: Exception do ErrorText := ErrorText + LineEnding + R.Message; end;
+      UpdateApplyState;
+      Exit;
+    end;
   end;
+  LangMgr.SetLanguage(LangCode);
+  if Assigned(FOnLanguageChanged) then FOnLanguageChanged(Self);
+  FBaseline := CloneConfig(FConfig);
+  FBaselineLanguage := LangCode;
+  FBaselineBalloon := cbBaloonHint.Checked;
+  ApplyLocalization;
+  RefreshMonitoring;
+  UpdateApplyState;
+  Result := True;
+end;
+
+procedure TSettingsForm.btnApplyClick(Sender: TObject);
+var ErrorText: string;
+begin
+  if not TryApplyConfig(ErrorText) then
+    MessageDlg(_('title_error'), ErrorText, mtError, [mbOK], 0);
 end;
 
 procedure TSettingsForm.btnCancelClick(Sender: TObject);
 begin
   SettingsDebugLog('btnCancelClick');
-  ModalResult := mrCancel;
+  if FConfigManager <> nil then
+  begin
+    SetConfig(FConfigManager.GetConfig);
+    LoadLanguageSelector;
+    cbBaloonHint.Checked := FConfigManager.GetBalloonHintEnabled;
+    UpdateApplyState;
+  end;
 end;
 
 procedure TSettingsForm.btnImportNodesClick(Sender: TObject);
@@ -795,7 +1028,7 @@ begin
           end;
           RefreshNodesList;
           RefreshGroupsList;
-          FModified := True;
+          UpdateApplyState;
           MessageDlg(_('title_success'), _('msg_import_success'), mtInformation, [mbOK], 0);
         end
         else
@@ -811,10 +1044,19 @@ begin
   end;
 end;
 
+procedure TSettingsForm.ExportDraft(const FileName: string);
+var Manager: TConfigManager;
+begin
+  Manager := TConfigManager.Create('');
+  try
+    Manager.SetConfig(FConfig);
+    Manager.ExportConfig(FileName, SelectedLanguage, Ord(cbBaloonHint.Checked));
+  finally Manager.Free; end;
+end;
+
 procedure TSettingsForm.btnExportNodesClick(Sender: TObject);
 var
   SaveDlg: TSaveDialog;
-  ConfigMgr: TConfigManager;
 begin
   SaveDlg := TSaveDialog.Create(nil);
   try
@@ -823,14 +1065,8 @@ begin
 
     if SaveDlg.Execute then
     begin
-      ConfigMgr := TConfigManager.Create('');
-      try
-        ConfigMgr.SetConfig(FConfig);
-        ConfigMgr.ExportConfig(SaveDlg.FileName);
-        MessageDlg(_('title_success'), _('msg_export_success'), mtInformation, [mbOK], 0);
-      finally
-        ConfigMgr.Free;
-      end;
+      ExportDraft(SaveDlg.FileName);
+      MessageDlg(_('title_success'), _('msg_export_success'), mtInformation, [mbOK], 0);
     end;
   finally
     SaveDlg.Free;
@@ -847,7 +1083,7 @@ begin
   if (Idx >= 0) and (Idx <= High(FConfig.Groups)) then
   begin
     FConfig.Groups[Idx].Enabled := Item.Checked;
-    FModified := True;
+    UpdateApplyState;
   end;
 end;
 

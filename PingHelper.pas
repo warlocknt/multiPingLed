@@ -4,8 +4,7 @@
 
 interface
 
-uses
-  Classes, SysUtils, Windows, Winsock2;
+uses Classes, SysUtils, Windows;
 
 type
   TPingResult = record
@@ -13,193 +12,139 @@ type
     ResponseTime: Integer;
     ErrorMessage: string;
   end;
+  TICMPCreate = function: THandle; stdcall;
+  TICMPClose = function(Handle: THandle): BOOL; stdcall;
+  TICMPSend = function(Handle, Event: THandle; Apc, Context: Pointer; Address: DWORD;
+    Data: Pointer; DataSize: Word; Options, Reply: Pointer; ReplySize, Timeout: DWORD): DWORD; stdcall;
+  TICMPParse = function(Reply: Pointer; Size: DWORD): DWORD; stdcall;
+  TICMPAPI = record
+    CreateHandle: TICMPCreate;
+    CloseHandle: TICMPClose;
+    Send: TICMPSend;
+    Parse: TICMPParse;
+  end;
 
 function PingHost(const Host: string; TimeoutMs: Integer): TPingResult;
+function PingHostCancelable(const Host: string; TimeoutMs: Integer; CancelEvent: THandle): TPingResult;
+function PingAddress(const API: TICMPAPI; Address: DWORD; TimeoutMs: Integer; CancelEvent: THandle): TPingResult;
 
 implementation
 
-uses PingCompare;
+uses PingCompare, DNSResolver, AsyncCompletion;
 
-// ICMP API из iphlpapi.dll
-const
-  IP_STATUS_BASE = 11000;
-  IP_SUCCESS = 0;
-  IP_DEST_NET_UNREACHABLE = IP_STATUS_BASE + 2;
-  IP_DEST_HOST_UNREACHABLE = IP_STATUS_BASE + 3;
-  IP_REQ_TIMED_OUT = IP_STATUS_BASE + 10;
+function IcmpCreateFile: THandle; stdcall; external 'iphlpapi.dll';
+function IcmpCloseHandle(Handle: THandle): BOOL; stdcall; external 'iphlpapi.dll';
+function IcmpSendEcho2(Handle, Event: THandle; Apc, Context: Pointer; Address: DWORD;
+  Data: Pointer; DataSize: Word; Options, Reply: Pointer; ReplySize, Timeout: DWORD): DWORD;
+  stdcall; external 'iphlpapi.dll';
+function IcmpParseReplies(Reply: Pointer; Size: DWORD): DWORD; stdcall; external 'iphlpapi.dll';
 
 type
-  TPingPayload = array[0..31] of Byte;
-  PICMP_ECHO_REPLY = ^TICMP_ECHO_REPLY;
-  TICMP_ECHO_REPLY = record
-    Address: DWORD;
-    Status: DWORD;
-    RoundTripTime: DWORD;
-    DataSize: WORD;
-    Reserved: WORD;
-    Data: Pointer;
-    Options: record
-      Ttl: BYTE;
-      Tos: BYTE;
-      Flags: BYTE;
-      OptionsSize: BYTE;
-      OptionsData: Pointer;
-    end;
+  PICMPRequest = ^TICMPRequest;
+  TICMPRequest = record
+    Async: TAsyncContext;
+    API: TICMPAPI;
+    Handle: THandle;
+    Data: array[0..31] of Byte;
+    Reply: array[0..127] of Byte;
+  end;
+  PICMPReplyPrefix = ^TICMPReplyPrefix;
+  TICMPReplyPrefix = record
+    Address, Status, RoundTripTime: DWORD;
   end;
 
-
-var
-  WSAInitialized: Boolean = False;
-  WSAData: TWSAData;
-
-// Импортируем функции из iphlpapi.dll
-function IcmpCreateFile: THandle; stdcall; external 'iphlpapi.dll';
-function IcmpCloseHandle(IcmpHandle: THandle): BOOL; stdcall; external 'iphlpapi.dll';
-function IcmpSendEcho(
-  IcmpHandle: THandle;
-  DestinationAddress: DWORD;
-  RequestData: Pointer;
-  RequestSize: WORD;
-  RequestOptions: Pointer;
-  ReplyBuffer: Pointer;
-  ReplySize: DWORD;
-  Timeout: DWORD
-): DWORD; stdcall; external 'iphlpapi.dll';
-
-function GetHostIP(const Host: string): DWORD;
-var
-  HostEnt: PHostEnt;
-  Addr: PDWORD;
+procedure DestroyICMPRequest(Context: Pointer); stdcall;
+var Request: PICMPRequest;
 begin
-  Result := 0;
-  if not WSAInitialized then Exit;
-  HostEnt := GetHostByName(PChar(Host));
-  if HostEnt = nil then Exit;
-  Addr := PDWORD(HostEnt^.h_addr^);
-  if Addr <> nil then
-    Result := Addr^;
+  Request := PICMPRequest(Context);
+  if (Request^.Handle <> 0) and (Request^.Handle <> INVALID_HANDLE_VALUE) then
+    Request^.API.CloseHandle(Request^.Handle);
 end;
 
-procedure CleanupPingHelper;
+function PingAddress(const API: TICMPAPI; Address: DWORD; TimeoutMs: Integer; CancelEvent: THandle): TPingResult;
+var Request: PICMPRequest; Count, Code, WaitResult, HandleCount, CompletionIndex: DWORD;
+    Handles: array[0..1] of THandle; Pending: Boolean; Reply: PICMPReplyPrefix;
 begin
-  if WSAInitialized then
-  begin
-    WSACleanup;
-    WSAInitialized := False;
+  Result := Default(TPingResult); Result.ResponseTime := -1;
+  if TimeoutMs <= 0 then begin Result.ErrorMessage := 'Invalid timeout'; Exit; end;
+  if (CancelEvent <> 0) and (WaitForSingleObject(CancelEvent, 0) = WAIT_OBJECT_0) then
+  begin Result.ErrorMessage := 'Ping cancelled'; Exit; end;
+  Request := CreateAsyncContext(SizeOf(TICMPRequest), @DestroyICMPRequest);
+  if Request = nil then begin Result.ErrorMessage := 'Cannot create ICMP request context'; Exit; end;
+  Pending := False;
+  try
+    Request^.API := API;
+    Request^.Handle := API.CreateHandle();
+    if Request^.Handle = INVALID_HANDLE_VALUE then
+    begin Result.ErrorMessage := 'Failed to create ICMP handle'; Exit; end;
+    FillChar(Request^.Data, SizeOf(Request^.Data), Ord('a'));
+    Count := API.Send(Request^.Handle, Request^.Async.CompletionEvent, nil, nil, Address,
+      @Request^.Data[0], SizeOf(Request^.Data), nil, @Request^.Reply[0], SizeOf(Request^.Reply), TimeoutMs);
+    if Count = 0 then
+    begin
+      Code := GetLastError;
+      if Code <> ERROR_IO_PENDING then
+      begin Result.ErrorMessage := 'Ping failed: ' + IntToStr(Code); Exit; end;
+      Pending := True;
+      Handles[0] := Request^.Async.CompletionEvent; HandleCount := 1; CompletionIndex := 0;
+      if CancelEvent <> 0 then
+      begin Handles[0] := CancelEvent; Handles[1] := Request^.Async.CompletionEvent; HandleCount := 2; CompletionIndex := 1; end;
+      WaitResult := WaitForMultipleObjects(HandleCount, @Handles[0], False, TimeoutMs);
+      if WaitResult <> WAIT_OBJECT_0 + CompletionIndex then
+      begin
+        if (CancelEvent <> 0) and (WaitResult = WAIT_OBJECT_0) then Result.ErrorMessage := 'Ping cancelled'
+        else if WaitResult = WAIT_TIMEOUT then Result.ErrorMessage := 'Request timed out'
+        else Result.ErrorMessage := 'ICMP wait failed: ' + IntToStr(GetLastError);
+        Exit;
+      end;
+      Pending := False;
+      Count := API.Parse(@Request^.Reply[0], SizeOf(Request^.Reply));
+    end;
+    if (CancelEvent <> 0) and (WaitForSingleObject(CancelEvent, 0) = WAIT_OBJECT_0) then
+    begin Result.ErrorMessage := 'Ping cancelled'; Exit; end;
+    if Count = 0 then
+    begin Result.ErrorMessage := 'Ping failed: ' + IntToStr(GetLastError); Exit; end;
+    // The first three DWORD fields have identical layout in ECHO_REPLY and ECHO_REPLY32.
+    Reply := PICMPReplyPrefix(@Request^.Reply[0]);
+    if Reply^.Status = 0 then
+    begin Result.Success := True; Result.ResponseTime := Reply^.RoundTripTime; end
+    else Result.ErrorMessage := 'Ping status: ' + IntToStr(Reply^.Status);
+  finally
+    // A pending request retains its handle and buffers until Windows signals completion.
+    ReleaseAsyncContext(Request, not Pending);
   end;
 end;
 
 function PingHost(const Host: string; TimeoutMs: Integer): TPingResult;
-var
-  ReplySize: DWORD;
-  ReplyBuffer: Pointer;
-  IPAddr: DWORD;
-  PingResult: DWORD;
-  pEchoReply: PICMP_ECHO_REPLY;
-  hIcmp: THandle;
-  Comparison: TPingComparison;
-  AddressText: string;
-  RequestData: TPingPayload;
 begin
-  Result.Success := False;
-  Result.ResponseTime := -1;
-  Result.ErrorMessage := '';
+  Result := PingHostCancelable(Host, TimeoutMs, 0);
+end;
 
-  if TimeoutMs <= 0 then
-  begin
-    Result.ErrorMessage := 'Invalid timeout';
-    Exit;
-  end;
-  hIcmp := IcmpCreateFile;
-  if hIcmp = INVALID_HANDLE_VALUE then
-  begin
-    Result.ErrorMessage := 'Failed to create ICMP handle';
-    Exit;
-  end;
-
-  ReplyBuffer := nil;
+function PingHostCancelable(const Host: string; TimeoutMs: Integer; CancelEvent: THandle): TPingResult;
+var Address: DWORD; API: TICMPAPI; Comparison: TPingComparison; AddressText: string;
+begin
+  Result := Default(TPingResult); Result.ResponseTime := -1;
+  if TimeoutMs <= 0 then begin Result.ErrorMessage := 'Invalid timeout'; Exit; end;
+  if not ResolveIPv4(Host, DNSLookupTimeoutMs, CancelEvent, Address, Result.ErrorMessage) then Exit;
+  API.CreateHandle := @IcmpCreateFile; API.CloseHandle := @IcmpCloseHandle;
+  API.Send := @IcmpSendEcho2; API.Parse := @IcmpParseReplies;
   Comparison := nil;
+  if ComparisonEnabled then
+  begin
+    AddressText := Format('%d.%d.%d.%d', [Address and $FF, (Address shr 8) and $FF,
+      (Address shr 16) and $FF, Address shr 24]);
+    try Comparison := TPingComparison.Create(Host, AddressText, TimeoutMs, CancelEvent);
+    except end;
+  end;
   try
-    // Получаем IP адрес хоста
-    IPAddr := GetHostIP(Host);
-    if IPAddr = 0 then
-    begin
-      Result.ErrorMessage := 'Cannot resolve host: ' + Host;
-      Exit;
-    end;
-
-    if ComparisonEnabled then
-    begin
-      AddressText := Format('%d.%d.%d.%d', [IPAddr and $FF,
-        (IPAddr shr 8) and $FF, (IPAddr shr 16) and $FF, IPAddr shr 24]);
-      try
-        Comparison := TPingComparison.Create(Host, AddressText, TimeoutMs);
-      except
-        // A diagnostic launch failure must not prevent the ICMP probe.
-      end;
-    end;
-
-    // Размер буфера для ответа
-    RequestData := Default(TPingPayload);
-    FillChar(RequestData, SizeOf(RequestData), Ord('a'));
-    ReplySize := SizeOf(TICMP_ECHO_REPLY) + SizeOf(RequestData) + 8;
-    GetMem(ReplyBuffer, ReplySize);
-    // Отправляем ICMP echo request
-    PingResult := IcmpSendEcho(
-      hIcmp,
-      IPAddr,
-      @RequestData[0], SizeOf(RequestData), // 32 bytes of echo data
-      nil,              // Опции по умолчанию
-      ReplyBuffer,
-      ReplySize,
-      TimeoutMs
-    );
-
-    if PingResult = 0 then
-    begin
-      // Ошибка
-      PingResult := GetLastError;
-      case PingResult of
-        IP_REQ_TIMED_OUT: Result.ErrorMessage := 'Request timed out';
-        IP_DEST_HOST_UNREACHABLE: Result.ErrorMessage := 'Host unreachable';
-        IP_DEST_NET_UNREACHABLE: Result.ErrorMessage := 'Network unreachable';
-        else Result.ErrorMessage := 'Ping failed: ' + IntToStr(PingResult);
-      end;
-    end
-    else
-    begin
-      // Успех
-      pEchoReply := PICMP_ECHO_REPLY(ReplyBuffer);
-      if pEchoReply^.Status = IP_SUCCESS then
-      begin
-        Result.Success := True;
-        Result.ResponseTime := pEchoReply^.RoundTripTime;
-      end
-      else
-      begin
-        Result.ErrorMessage := 'Ping status: ' + IntToStr(pEchoReply^.Status);
-      end;
-    end;
-
+    Result := PingAddress(API, Address, TimeoutMs, CancelEvent);
   finally
-    if ReplyBuffer <> nil then FreeMem(ReplyBuffer);
-    IcmpCloseHandle(hIcmp);
     if Comparison <> nil then
     begin
-      try
-        Comparison.Finish(Result.Success, Result.ResponseTime, Result.ErrorMessage);
+      try Comparison.Finish(Result.Success, Result.ResponseTime, Result.ErrorMessage);
       finally Comparison.Free; end;
     end;
   end;
 end;
-
-initialization
-  // Инициализируем один раз до старта потоков — исключает гонку между потоками
-  WSAData := Default(TWSAData);
-  if WSAStartup($0202, WSAData) = 0 then
-    WSAInitialized := True;
-
-finalization
-  CleanupPingHelper;
 
 end.

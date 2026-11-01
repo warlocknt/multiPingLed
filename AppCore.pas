@@ -46,6 +46,7 @@ type
     FGroupManager: TGroupManager;    // Менеджер групп (объединение узлов в визуальные группы)
     FTrayController: TTrayController; // Контроллер иконок в системном трее
     FAboutForm: TAboutForm;
+    FSettingsForm: TSettingsForm;
     FVersionCheckThread: TVersionCheckThread; // Поток проверки версии
     FInitialized: Boolean;           // Флаг инициализации
     FApplyingConfig: Boolean;        // Флаг: применяется конфигурация
@@ -54,8 +55,12 @@ type
     procedure InitializeConfig;
     // Применение конфигурации к менеджерам узлов и групп
     procedure ApplyConfig(Sender: TObject);
+    procedure ApplyConfigTransaction(Sender: TObject; Persist: TNotifyEvent);
     // Показать окно настроек
     procedure ShowSettings(Sender: TObject);
+    procedure ShowMonitoring(Sender: TObject);
+    procedure OpenSettings(Monitoring: Boolean);
+    procedure SettingsClosed(Sender: TObject; var CloseAction: TCloseAction);
     // Показать окно "О программе"
     procedure ShowAbout(Sender: TObject);
     // Завершение работы приложения
@@ -123,6 +128,7 @@ end;
 
 destructor TAppCore.Destroy;
 begin
+  FreeAndNil(FSettingsForm);
   CloseHistory;
   FreeAndNil(FHistoryTimer);
   FreeAndNil(FHistory);
@@ -216,6 +222,7 @@ begin
     
     // Настраиваем обработчики событий для трея
     FTrayController.OnShowSettings := @ShowSettings;
+    FTrayController.OnShowMonitoring := @ShowMonitoring;
     FTrayController.OnExit := @ExitApp;
     FTrayController.OnAboutShow := @ShowAbout;
     FTrayController.Initialize;
@@ -318,61 +325,107 @@ begin
 end;
 
 procedure TAppCore.ApplyConfig(Sender: TObject);
+begin
+  ApplyConfigTransaction(Sender, nil);
+end;
+
+procedure TAppCore.ApplyConfigTransaction(Sender: TObject; Persist: TNotifyEvent);
 var
   Config: TAppConfig;
   Count, I: Integer;
   EnabledGroups: array of TNodeGroup;
   ActiveNodeIds : TIntArray;
+  Before: TMonitoringSnapshot;
+  OldNodes: NodeManager.TNodeArray;
+  OldIds: TIntArray;
+  PreviousGroups: TGroupArray;
+  OldGroups: array of TNodeGroup;
+  OldLogging, OldComparison, OldBalloon: Boolean;
 begin
+  Before := FNodeManager.GetMonitoringSnapshot;
+  OldNodes := nil;
+  SetLength(OldNodes, Length(Before)); OldIds := nil;
+  for I := 0 to High(Before) do
+  begin
+    OldNodes[I] := Before[I].Node;
+    if Before[I].Active then
+    begin SetLength(OldIds, Length(OldIds) + 1); OldIds[High(OldIds)] := Before[I].Node.Id; end;
+  end;
+  PreviousGroups := FGroupManager.GetGroups;
+  OldGroups := nil;
+  SetLength(OldGroups, Length(PreviousGroups));
+  for I := 0 to High(PreviousGroups) do
+  begin
+    OldGroups[I].Id := PreviousGroups[I].Id; OldGroups[I].Name := PreviousGroups[I].Name;
+    OldGroups[I].GroupType := PreviousGroups[I].GroupType;
+    OldGroups[I].NodeIds := PreviousGroups[I].NodeIds; OldGroups[I].Enabled := True;
+  end;
+  OldLogging := LoggingEnabled; OldComparison := ComparisonLoggingEnabled;
+  OldBalloon := FTrayController.BalloonHintEnabled;
   FApplyingConfig := True;
   try
-    // Блокируем пункт меню настроек и обновляем UI
-    if FTrayController <> nil then
-    begin
-      FTrayController.SetSettingsEnabled(False);
-      // Do not pump messages while the configuration is partially applied.
-    end;
-    
-    AppDebugLog('ApplyConfig called');
-    Config := FConfigManager.GetConfig;
-    ConfigureDiagnostics(Config.LoggingEnabled, Config.ComparePingEnabled);
-
-    // Переприменяем настройку balloon hint (могла измениться в настройках)
-    if FTrayController <> nil then
-      FTrayController.BalloonHintEnabled := FConfigManager.GetBalloonHintEnabled;
-    AppDebugLog('Config has ' + IntToStr(Length(Config.Groups)) + ' groups, ' + IntToStr(Length(Config.Nodes)) + ' nodes');
-    
-    ActiveNodeIds := GetActiveNodeIds(Config.Groups);
-    AppDebugLog('ActiveNodeIds count: ' + IntToStr(Length(ActiveNodeIds)));
-
-    // Пингуем только узлы из активных групп
-    FNodeManager.OnStateChange := nil;
-    if FHistory <> nil then FHistory.SetNodes(Config.Nodes, ActiveNodeIds);
-    FNodeManager.ApplyConfig(Config.Nodes, ActiveNodeIds);
-
-    // Оставляем только включённые группы
-    Count := 0;
-    EnabledGroups := nil;
-    SetLength(EnabledGroups, Length(Config.Groups));
-    for I := 0 to High(Config.Groups) do
-    begin
-      if Config.Groups[I].Enabled then
+    try
+      // Блокируем пункт меню настроек и обновляем UI
+      if FTrayController <> nil then
       begin
-        EnabledGroups[Count] := Config.Groups[I];
-        Inc(Count);
+        FTrayController.SetSettingsEnabled(False);
+        // Do not pump messages while the configuration is partially applied.
+      end;
+    
+      AppDebugLog('ApplyConfig called');
+      Config := FConfigManager.GetConfig;
+      ConfigureDiagnostics(Config.LoggingEnabled, Config.ComparePingEnabled);
+
+      // Переприменяем настройку balloon hint (могла измениться в настройках)
+      if FTrayController <> nil then
+        FTrayController.BalloonHintEnabled := FConfigManager.GetBalloonHintEnabled;
+      AppDebugLog('Config has ' + IntToStr(Length(Config.Groups)) + ' groups, ' + IntToStr(Length(Config.Nodes)) + ' nodes');
+    
+      ActiveNodeIds := GetActiveNodeIds(Config.Groups);
+      AppDebugLog('ActiveNodeIds count: ' + IntToStr(Length(ActiveNodeIds)));
+
+      // Пингуем только узлы из активных групп
+      FNodeManager.OnStateChange := nil;
+      FNodeManager.ApplyConfig(Config.Nodes, ActiveNodeIds, Persist);
+
+      // Оставляем только включённые группы
+      Count := 0;
+      EnabledGroups := nil;
+      SetLength(EnabledGroups, Length(Config.Groups));
+      for I := 0 to High(Config.Groups) do
+      begin
+        if Config.Groups[I].Enabled then
+        begin
+          EnabledGroups[Count] := Config.Groups[I];
+          Inc(Count);
+        end;
+      end;
+      SetLength(EnabledGroups, Count);
+
+      AppDebugLog('Enabled groups after filter: ' + IntToStr(Count));
+
+      // Передаём GroupManager только включённые группы
+      FGroupManager.ApplyConfig(EnabledGroups, FNodeManager, False);
+      AppDebugLog('GroupManager.ApplyConfig called');
+    
+      // Инкрементальное обновление иконок (только новые/удалённые)
+      FTrayController.SyncGroups(FGroupManager, FNodeManager);
+      AppDebugLog('TrayController.SyncGroups called from ApplyConfig');
+      FGroupManager.EnableCommands;
+    except
+      on E: Exception do
+      begin
+        try
+          FNodeManager.ApplyConfig(OldNodes, OldIds);
+          FGroupManager.ApplyConfig(OldGroups, FNodeManager);
+          FTrayController.SyncGroups(FGroupManager, FNodeManager);
+        finally
+          ConfigureDiagnostics(OldLogging, OldComparison);
+          FTrayController.BalloonHintEnabled := OldBalloon;
+        end;
+        raise;
       end;
     end;
-    SetLength(EnabledGroups, Count);
-
-    AppDebugLog('Enabled groups after filter: ' + IntToStr(Count));
-
-    // Передаём GroupManager только включённые группы
-    FGroupManager.ApplyConfig(EnabledGroups, FNodeManager);
-    AppDebugLog('GroupManager.ApplyConfig called');
-    
-    // Инкрементальное обновление иконок (только новые/удалённые)
-    FTrayController.SyncGroups(FGroupManager, FNodeManager);
-    AppDebugLog('TrayController.SyncGroups called from ApplyConfig');
   finally
     // Разблокируем пункт меню настроек
     if FTrayController <> nil then
@@ -382,31 +435,43 @@ begin
 end;
 
 procedure TAppCore.ShowSettings(Sender: TObject);
-var
-  Form: TSettingsForm;
 begin
-  if FClosing or FApplyingConfig then
-  begin
-    AppDebugLog('ShowSettings: config apply in progress, ignoring');
-    Exit;
-  end;
+  OpenSettings(False);
+end;
 
-  AppDebugLog('ShowSettings called');
-  // Создаём форму при каждом вызове и уничтожаем сразу после закрытия —
-  // и по Apply (mrOK), и по Cancel / крестику (mrCancel). Одноразовая форма
-  // исключает залипание состояния между вызовами.
-  Form := TSettingsForm.Create(nil);
-  try
-    Form.SetConfig(FConfigManager.GetConfig);
-    Form.ConfigManager := FConfigManager;
-    Form.OnApply := @ApplyConfig;
-    Form.OnLanguageChanged := @UpdateTrayMenu;
-    AppDebugLog('Showing settings modal');
-    Form.ShowModal;
-    AppDebugLog('Settings form closed');
-  finally
-    Form.Free;
+procedure TAppCore.ShowMonitoring(Sender: TObject);
+begin
+  OpenSettings(True);
+end;
+
+procedure TAppCore.SettingsClosed(Sender: TObject; var CloseAction: TCloseAction);
+begin
+  CloseAction := caFree;
+  FSettingsForm := nil;
+end;
+
+procedure TAppCore.OpenSettings(Monitoring: Boolean);
+begin
+  if FClosing or FApplyingConfig then Exit;
+  if FSettingsForm = nil then
+  begin
+    FSettingsForm := TSettingsForm.Create(nil);
+    try
+      FSettingsForm.SetConfig(FConfigManager.GetConfig);
+      FSettingsForm.ConfigManager := FConfigManager;
+      FSettingsForm.NodeManager := FNodeManager;
+      FSettingsForm.OnApply := @ApplyConfigTransaction;
+      FSettingsForm.OnLanguageChanged := @UpdateTrayMenu;
+      FSettingsForm.OnClose := @SettingsClosed;
+    except
+      FreeAndNil(FSettingsForm);
+      raise;
+    end;
   end;
+  FSettingsForm.OpenPage(Monitoring);
+  if FSettingsForm.WindowState = wsMinimized then FSettingsForm.WindowState := wsNormal;
+  FSettingsForm.Show;
+  FSettingsForm.BringToFront;
 end;
 
 procedure TAppCore.ShowAbout(Sender: TObject);
@@ -743,7 +808,10 @@ end;
 procedure TAppCore.UpdateTrayMenu(Sender: TObject);
 begin
   if FTrayController <> nil then
+  begin
     FTrayController.UpdateMenuLocalization;
+    FTrayController.BalloonHintEnabled := FConfigManager.GetBalloonHintEnabled;
+  end;
 end;
 
 initialization

@@ -22,6 +22,7 @@ type
     FGroupIcons: array of TTrayIcon;  // Массив иконок групп
     FGroupManager: TGroupManager;     // Ссылка на менеджер групп
     FNodeManager: TNodeManager;       // Ссылка на менеджер узлов
+    FOnShowMonitoring: TNotifyEvent;
     FOnShowSettings: TNotifyEvent;    // Обработчик открытия настроек
     FOnExit: TNotifyEvent;            // Обработчик выхода
     FAboutShow: TNotifyEvent;        // Обработчик "О программе"
@@ -30,6 +31,8 @@ type
     FBalloonHintEnabled: Boolean;      // Показывать balloon hint при смене статуса
     // Сохраненные состояния узлов для определения изменений
     FLastGroupStates: array of array of ConfigManager.TNodeState;
+    FLastGroupNodeIds: array of array of Integer;
+    FLastGroupNodeHosts: array of array of string;
 
     // Создание контекстного меню (Settings, Exit)
     procedure CreatePopupMenu;
@@ -38,6 +41,7 @@ type
     // Обработчик клика по "Settings"
     procedure RefreshHints;
     procedure OnSettingsClick(Sender: TObject);
+    procedure OnMonitoringClick(Sender: TObject);
     // Отложенный вызов ShowSettings
     procedure DoShowSettings(Data: PtrInt);
     // Обработчик клика по "About"
@@ -57,7 +61,9 @@ type
     // Создание одной иконки для группы
     procedure CreateIconForGroup(const Group: TGroupInfo; var OutIdx: Integer);
     // Показать balloon hint об изменении статуса узла
-    procedure ShowStatusBalloon(IconIdx, NodeId: Integer; NewState: ConfigManager.TNodeState);
+  protected
+    function RenderIcon(const Group: TGroupInfo): TIcon; virtual;
+    procedure ShowStatusBalloon(IconIdx, NodeId: Integer; NewState: ConfigManager.TNodeState); virtual;
   public
     constructor Create;
     destructor Destroy; override;
@@ -69,6 +75,7 @@ type
     procedure SyncGroups(GroupManager: TGroupManager; NodeManager: TNodeManager);
     procedure UpdateMenuLocalization;
     procedure SetSettingsEnabled(Enabled: Boolean);
+    property OnShowMonitoring: TNotifyEvent read FOnShowMonitoring write FOnShowMonitoring;
     property OnShowSettings: TNotifyEvent read FOnShowSettings write FOnShowSettings;
     property OnAboutShow: TNotifyEvent read FAboutShow write FAboutShow;
     property OnExit: TNotifyEvent read FOnExit write FOnExit;
@@ -82,6 +89,11 @@ uses LogWriter;
 procedure DebugLog(const Msg: string);
 begin
   ApplicationLog('multiPingLed[Tray]: ' + Msg);
+end;
+
+function TTrayController.RenderIcon(const Group: TGroupInfo): TIcon;
+begin
+  Result := TIconRenderer.RenderGroupIcon(Group);
 end;
 
 constructor TTrayController.Create;
@@ -101,6 +113,8 @@ begin
   // Инициализируем массивы
   SetLength(FGroupIcons, 0);
   SetLength(FLastGroupStates, 0);
+  SetLength(FLastGroupNodeIds, 0);
+  SetLength(FLastGroupNodeHosts, 0);
   FGroupManager := nil;
   FNodeManager := nil;
   FBalloonHintEnabled := True;  // По умолчанию включено
@@ -186,7 +200,7 @@ begin
   FakeGroup.NodeStates[0] := ConfigManager.nsUp;
   
   // Используем IconRenderer для создания иконки
-  Result := TIconRenderer.RenderGroupIcon(FakeGroup);
+  Result := RenderIcon(FakeGroup);
 end;
 
 procedure TTrayController.Initialize;
@@ -368,6 +382,9 @@ FGroupManager := GroupManager;
   end;
 
   SetLength(FGroupIcons, 0);
+  FLastGroupStates := nil;
+  FLastGroupNodeIds := nil;
+  FLastGroupNodeHosts := nil;
 
   // Если менеджер групп не задан - выходим
   if FGroupManager = nil then 
@@ -385,13 +402,17 @@ DebugLog('Got ' + IntToStr(Length(Groups)) + ' groups');
 DebugLog('No groups found, creating placeholder icon');
 SetLength(FGroupIcons, 1);
     SetLength(FLastGroupStates, 1);
+    SetLength(FLastGroupNodeIds, 1);
+    SetLength(FLastGroupNodeHosts, 1);
     SetLength(FLastGroupStates[0], 0);
+    SetLength(FLastGroupNodeIds[0], 0);
+    SetLength(FLastGroupNodeHosts[0], 0);
     
     NewIcon := TTrayIcon.Create(nil);
     try
       NewIcon.Hint := 'multiPingLed';
       NewIcon.PopUpMenu := FPopupMenu;
-      NewIcon.OnDblClick := @OnSettingsClick;
+      NewIcon.OnDblClick := @OnMonitoringClick;
       
       // Создаем зеленую иконку (как один узел в состоянии Up)
       TempIcon := CreateGreenDotIcon(16);
@@ -424,11 +445,15 @@ FreeAndNil(NewIcon);
 
   SetLength(FGroupIcons, Length(Groups));
   SetLength(FLastGroupStates, Length(Groups));
+  SetLength(FLastGroupNodeIds, Length(Groups));
+  SetLength(FLastGroupNodeHosts, Length(Groups));
 
   // Инициализируем внутренние массивы состояний в зависимости от фактического количества узлов
   for I := 0 to High(Groups) do
   begin
     SetLength(FLastGroupStates[I], Length(Groups[I].NodeIds));
+    FLastGroupNodeIds[I] := Copy(Groups[I].NodeIds);
+    FLastGroupNodeHosts[I] := Copy(Groups[I].NodeHosts);
   end;
 
   // Создаем иконку для каждой группы
@@ -446,11 +471,11 @@ DebugLog('Creating tray icon for group ' + IntToStr(I) + ': ' + Groups[I].Name);
       end;
 NewIcon.Hint := BuildGroupHint(Groups[I]);
       NewIcon.PopUpMenu := FPopupMenu;
-      NewIcon.OnDblClick := @OnSettingsClick;
+      NewIcon.OnDblClick := @OnMonitoringClick;
       NewIcon.Tag := Groups[I].Id;
 
       // Создаем и устанавливаем начальную иконку
-      TempIcon := TIconRenderer.RenderGroupIcon(Groups[I]);
+      TempIcon := RenderIcon(Groups[I]);
       try
         if (TempIcon <> nil) and (TempIcon.Handle <> 0) then
         begin
@@ -495,7 +520,7 @@ begin
   if GroupStatesChanged then
   begin
     DebugLog('OnTimer: states changed, updating');
-    UpdateTrayIcons;
+    SyncGroups(FGroupManager, FNodeManager);
   end;
   RefreshHints;
 end;
@@ -524,11 +549,23 @@ begin
   Application.QueueAsyncCall(@DoShowSettings, 0);
 end;
 
+procedure TTrayController.OnMonitoringClick(Sender: TObject);
+begin
+  if FSettingsShowing then Exit;
+  if (FPopupMenu <> nil) and (FPopupMenu.Items.Count > 0) and
+    not FPopupMenu.Items[0].Enabled then Exit;
+  FSettingsShowing := True;
+  Application.QueueAsyncCall(@DoShowSettings, 1);
+end;
+
 procedure TTrayController.DoShowSettings(Data: PtrInt);
 begin
   try
-    if Assigned(FOnShowSettings) then
-      FOnShowSettings(Self);
+    if Data = 1 then
+    begin
+      if Assigned(FOnShowMonitoring) then FOnShowMonitoring(Self);
+    end
+    else if Assigned(FOnShowSettings) then FOnShowSettings(Self);
   finally
     FSettingsShowing := False;
   end;
@@ -553,21 +590,14 @@ var
   I, IconIdx: Integer;
   Groups: TGroupArray;
   NewIcon: TIcon;
-  J: Integer;
+  J, K, OldIndex: Integer;
   OldState: ConfigManager.TNodeState;
 begin
   if FGroupManager = nil then Exit;
 
   Groups := FGroupManager.GetGroups;
 
-  // Если количество групп изменилось - пересоздаем иконки
-  if Length(Groups) <> Length(FLastGroupStates) then
-  begin
-    // Не вызываем Rebuild из UpdateTrayIcons (может быть рекурсия)
-    // Вместо этого используем SyncGroups
-    SyncGroups(FGroupManager, FNodeManager);
-    Exit;
-  end;
+  // Missing icons are retried by SyncGroups; existing icons still update.
 
   // Если нет групп (заглушка) - ничего не обновляем
   if Length(Groups) = 0 then Exit;
@@ -579,7 +609,7 @@ begin
     if IconIdx < 0 then Continue;
 
     // Рисуем новую иконку с текущими состояниями
-    NewIcon := TIconRenderer.RenderGroupIcon(Groups[I]);
+    NewIcon := RenderIcon(Groups[I]);
     try
       if (NewIcon <> nil) and (NewIcon.Handle <> 0) then
       begin
@@ -595,8 +625,14 @@ begin
     // Пропускаем переходы из nsUnknown — это стартовая инициализация.
     for J := 0 to High(Groups[I].NodeStates) do
     begin
-      if J >= Length(FLastGroupStates[IconIdx]) then Continue;
-      OldState := FLastGroupStates[IconIdx][J];
+      OldIndex := -1;
+      for K := 0 to High(FLastGroupNodeIds[IconIdx]) do
+        if (FLastGroupNodeIds[IconIdx][K] = Groups[I].NodeIds[J]) and
+          (K < Length(FLastGroupNodeHosts[IconIdx])) and
+          (FLastGroupNodeHosts[IconIdx][K] = Groups[I].NodeHosts[J]) then
+        begin OldIndex := K; Break; end;
+      if (OldIndex < 0) or (OldIndex >= Length(FLastGroupStates[IconIdx])) then Continue;
+      OldState := FLastGroupStates[IconIdx][OldIndex];
       if (Groups[I].NodeStates[J] <> OldState) and (OldState <> ConfigManager.nsUnknown) then
         ShowStatusBalloon(IconIdx, Groups[I].NodeIds[J], Groups[I].NodeStates[J]);
     end;
@@ -607,6 +643,8 @@ begin
       SetLength(FLastGroupStates[IconIdx], Length(Groups[I].NodeStates));
     for J := 0 to High(Groups[I].NodeStates) do
       FLastGroupStates[IconIdx][J] := Groups[I].NodeStates[J];
+    FLastGroupNodeIds[IconIdx] := Copy(Groups[I].NodeIds);
+    FLastGroupNodeHosts[IconIdx] := Copy(Groups[I].NodeHosts);
   end;
   DebugLog('UpdateTrayIcons completed');
 end;
@@ -666,10 +704,10 @@ begin
   try
     NewIcon.Hint := BuildGroupHint(Group);
     NewIcon.PopUpMenu := FPopupMenu;
-    NewIcon.OnDblClick := @OnSettingsClick;
+    NewIcon.OnDblClick := @OnMonitoringClick;
     NewIcon.Tag := Group.Id;
 
-    TempIcon := TIconRenderer.RenderGroupIcon(Group);
+    TempIcon := RenderIcon(Group);
     try
       if (TempIcon <> nil) and (TempIcon.Handle <> 0) then
         NewIcon.Icon.Assign(TempIcon);
@@ -683,7 +721,11 @@ begin
 
     // Инициализируем массив состояний начальными значениями
     SetLength(FLastGroupStates, OutIdx + 1);
+    SetLength(FLastGroupNodeIds, OutIdx + 1);
+    SetLength(FLastGroupNodeHosts, OutIdx + 1);
     SetLength(FLastGroupStates[OutIdx], Length(Group.NodeIds));
+    FLastGroupNodeIds[OutIdx] := Copy(Group.NodeIds);
+    FLastGroupNodeHosts[OutIdx] := Copy(Group.NodeHosts);
     for I := 0 to High(Group.NodeIds) do
       FLastGroupStates[OutIdx][I] := Group.NodeStates[I];
 
@@ -698,6 +740,8 @@ begin
         FGroupIcons[OutIdx] := nil;
         SetLength(FGroupIcons, OutIdx);
         SetLength(FLastGroupStates, OutIdx);
+        SetLength(FLastGroupNodeIds, OutIdx);
+        SetLength(FLastGroupNodeHosts, OutIdx);
       end;
       FreeAndNil(NewIcon);
       OutIdx := -1;
@@ -738,6 +782,8 @@ begin
     end;
     SetLength(FGroupIcons, 0);
     SetLength(FLastGroupStates, 0);
+    SetLength(FLastGroupNodeIds, 0);
+    SetLength(FLastGroupNodeHosts, 0);
     // Пересоздаём заглушку
     Rebuild(GroupManager, NodeManager);
     Exit;
@@ -791,8 +837,14 @@ begin
           if I < Length(FLastGroupStates) then
           begin
             if Idx >= Length(FLastGroupStates) then
+            begin
               SetLength(FLastGroupStates, Idx + 1);
+              SetLength(FLastGroupNodeIds, Idx + 1);
+              SetLength(FLastGroupNodeHosts, Idx + 1);
+            end;
             FLastGroupStates[Idx] := FLastGroupStates[I];
+            FLastGroupNodeIds[Idx] := FLastGroupNodeIds[I];
+            FLastGroupNodeHosts[Idx] := FLastGroupNodeHosts[I];
           end;
         end;
         Inc(Idx);
@@ -800,6 +852,8 @@ begin
     end;
     SetLength(FGroupIcons, Idx);
     SetLength(FLastGroupStates, Idx);
+    SetLength(FLastGroupNodeIds, Idx);
+    SetLength(FLastGroupNodeHosts, Idx);
   end;
 
   // Создаём иконки для новых групп
@@ -847,7 +901,11 @@ begin
     for J := 0 to High(Groups[I].NodeStates) do
     begin
       if J < Length(FLastGroupStates[IconIdx]) then
-        if Groups[I].NodeStates[J] <> FLastGroupStates[IconIdx][J] then
+        if (Groups[I].NodeStates[J] <> FLastGroupStates[IconIdx][J]) or
+          (J >= Length(FLastGroupNodeIds[IconIdx])) or
+          (Groups[I].NodeIds[J] <> FLastGroupNodeIds[IconIdx][J]) or
+          (J >= Length(FLastGroupNodeHosts[IconIdx])) or
+          (Groups[I].NodeHosts[J] <> FLastGroupNodeHosts[IconIdx][J]) then
         begin
           Result := True;
           Exit;

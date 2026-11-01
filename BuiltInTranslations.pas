@@ -14,10 +14,20 @@ begin
   if Language = 'russian' then
   begin
     Add('code=russian');
+    Add('error_invalid_node_id=Некорректный ID узла: %s');
     Add('app_already_running=Приложение multiPingLED уже запущено');
     Add('name=Русский');
     Add('app_title=Multi Ping LED');
     Add('settings_title=Настройки');
+    Add('tab_monitoring=Мониторинг');
+    Add('monitor_status=Статус');
+    Add('monitor_latency=Задержка');
+    Add('monitor_losses=Потери / 20');
+    Add('monitor_changed=Изменение');
+    Add('monitor_paused=Приостановлен');
+    Add('monitor_unknown=Неизвестно');
+    Add('btn_discard_changes=Отменить изменения');
+    Add('monitor_legend=Зелёный — доступен; красный — подтверждённый отказ; серый — неизвестно или приостановлен.');
     Add('tab_nodes=Узлы');
     Add('tab_groups=Группы');
     Add('btn_add=Добавить');
@@ -52,8 +62,8 @@ begin
     Add('error_node_in_group=Этот узел используется в группе. Сначала удалите его из всех групп.');
     Add('error_no_nodes=Сначала создайте хотя бы один узел.');
     Add('error_group_single=Тип группы "Один" требует ровно 1 узел');
-    Add('error_group_2x2=Тип группы "2x2" требует 2-4 узла');
-    Add('error_group_3x3=Тип группы "3x3" требует 5-9 узлов');
+    Add('error_group_2x2=Тип группы "2x2" требует 1-4 узла');
+    Add('error_group_3x3=Тип группы "3x3" требует 1-9 узлов');
     Add('confirm_delete_node=Удалить узел "%s"?');
     Add('confirm_delete_group=Удалить группу "%s"?');
     Add('title_confirm=Подтверждение');
@@ -148,10 +158,20 @@ begin
   else if Language = 'german' then
   begin
     Add('code=german');
+    Add('error_invalid_node_id=Ungültige Host-ID: %s');
     Add('app_already_running=Die Anwendung multiPingLED wird bereits ausgeführt.');
     Add('name=Deutsch');
     Add('app_title=Multi Ping LED');
     Add('settings_title=Einstellungen');
+    Add('tab_monitoring=Überwachung');
+    Add('monitor_status=Status');
+    Add('monitor_latency=Latenz');
+    Add('monitor_losses=Verluste / 20');
+    Add('monitor_changed=Geändert');
+    Add('monitor_paused=Pausiert');
+    Add('monitor_unknown=Unbekannt');
+    Add('btn_discard_changes=Änderungen verwerfen');
+    Add('monitor_legend=Grün: erreichbar; Rot: bestätigter Ausfall; Grau: unbekannt oder pausiert.');
     Add('tab_nodes=Knoten');
     Add('tab_groups=Gruppen');
     Add('btn_add=Hinzufügen');
@@ -186,8 +206,8 @@ begin
     Add('error_node_in_group=Dieser Knoten wird in einer Gruppe verwendet. Entfernen Sie ihn zuerst aus allen Gruppen.');
     Add('error_no_nodes=Erstellen Sie zuerst mindestens einen Knoten.');
     Add('error_group_single=Einzelner Gruppentyp erfordert genau 1 Knoten');
-    Add('error_group_2x2=2x2 Gruppentyp erfordert 2-4 Knoten');
-    Add('error_group_3x3=3x3 Gruppentyp erfordert 5-9 Knoten');
+    Add('error_group_2x2=2x2 Gruppentyp erfordert 1-4 Knoten');
+    Add('error_group_3x3=3x3 Gruppentyp erfordert 1-9 Knoten');
     Add('confirm_delete_node=Knoten "%s" löschen?');
     Add('confirm_delete_group=Gruppe "%s" löschen?');
     Add('title_confirm=Bestätigen');
@@ -282,10 +302,20 @@ begin
   else if Language = 'french' then
   begin
     Add('code=french');
+    Add('error_invalid_node_id=Identifiant de nœud incorrect : %s');
     Add('app_already_running=L’application multiPingLED est déjà en cours d’exécution.');
     Add('name=Français');
     Add('app_title=Multi Ping LED');
     Add('settings_title=Paramètres');
+    Add('tab_monitoring=Surveillance');
+    Add('monitor_status=État');
+    Add('monitor_latency=Latence');
+    Add('monitor_losses=Pertes / 20');
+    Add('monitor_changed=Changement');
+    Add('monitor_paused=En pause');
+    Add('monitor_unknown=Inconnu');
+    Add('btn_discard_changes=Annuler modifications');
+    Add('monitor_legend=Vert : disponible ; rouge : panne confirmée ; gris : inconnu ou en pause.');
     Add('tab_nodes=Nœuds');
     Add('tab_groups=Groupes');
     Add('btn_add=Ajouter');
@@ -320,8 +350,8 @@ begin
     Add('error_node_in_group=Ce nœud est utilisé dans un groupe. Supprimez-le d''abord de tous les groupes.');
     Add('error_no_nodes=Créez d''abord au moins un nœud.');
     Add('error_group_single=Le type de groupe Simple nécessite exactement 1 nœud');
-    Add('error_group_2x2=Le type de groupe 2x2 nécessite 2-4 nœuds');
-    Add('error_group_3x3=Le type de groupe 3x3 nécessite 5-9 nœuds');
+    Add('error_group_2x2=Le type de groupe 2x2 nécessite 1-4 nœuds');
+    Add('error_group_3x3=Le type de groupe 3x3 nécessite 1-9 nœuds');
     Add('confirm_delete_node=Supprimer le nœud "%s"?');
     Add('confirm_delete_group=Supprimer le groupe "%s"?');
     Add('title_confirm=Confirmation');
@@ -416,10 +446,20 @@ begin
   else if Language = 'kazakh' then
   begin
     Add('code=kazakh');
+    Add('error_invalid_node_id=Түйіннің ID мәні жарамсыз: %s');
     Add('app_already_running=multiPingLED қолданбасы қазірдің өзінде іске қосылған.');
     Add('name=Қазақша');
     Add('app_title=Multi Ping LED');
     Add('settings_title=Параметрлер');
+    Add('tab_monitoring=Бақылау');
+    Add('monitor_status=Күйі');
+    Add('monitor_latency=Кідіріс');
+    Add('monitor_losses=Жоғалту / 20');
+    Add('monitor_changed=Өзгеріс');
+    Add('monitor_paused=Тоқтатылған');
+    Add('monitor_unknown=Белгісіз');
+    Add('btn_discard_changes=Өзгерістерді болдырмау');
+    Add('monitor_legend=Жасыл — қолжетімді; қызыл — расталған ақау; сұр — белгісіз немесе тоқтатылған.');
     Add('tab_nodes=Тұйындар');
     Add('tab_groups=Топтар');
     Add('btn_add=Қосу');
@@ -454,8 +494,8 @@ begin
     Add('error_node_in_group=Бұл тұйын топта қолданылады. Оны барлық топтардан алдын ала алып тастаңыз.');
     Add('error_no_nodes=Алдымен кем дегенде бір тұйын жасаңыз.');
     Add('error_group_single=Жеке топ түрі тек 1 тұйынды қажет етеді');
-    Add('error_group_2x2=2x2 топ түрі 2-4 тұйынды қажет етеді');
-    Add('error_group_3x3=3x3 топ түрі 5-9 тұйынды қажет етеді');
+    Add('error_group_2x2=2x2 топ түрі 1-4 тұйынды қажет етеді');
+    Add('error_group_3x3=3x3 топ түрі 1-9 тұйынды қажет етеді');
     Add('confirm_delete_node="%s" тұйынын жою?');
     Add('confirm_delete_group="%s" тобын жою?');
     Add('title_confirm=Растау');
@@ -550,10 +590,20 @@ begin
   else
   begin
     Add('code=english');
+    Add('error_invalid_node_id=Invalid node ID: %s');
     Add('app_already_running=The multiPingLED application is already running.');
     Add('name=English');
     Add('app_title=Multi Ping LED');
     Add('settings_title=Settings');
+    Add('tab_monitoring=Monitoring');
+    Add('monitor_status=Status');
+    Add('monitor_latency=Latency');
+    Add('monitor_losses=Losses / 20');
+    Add('monitor_changed=Changed');
+    Add('monitor_paused=Paused');
+    Add('monitor_unknown=Unknown');
+    Add('btn_discard_changes=Discard changes');
+    Add('monitor_legend=Green: reachable; red: confirmed failure; gray: unknown or paused.');
     Add('tab_nodes=Nodes');
     Add('tab_groups=Groups');
     Add('btn_add=Add');
@@ -588,8 +638,8 @@ begin
     Add('error_node_in_group=This node is used in a group. Remove it from all groups first.');
     Add('error_no_nodes=Create at least one node first.');
     Add('error_group_single=Single group type requires exactly 1 node');
-    Add('error_group_2x2=2x2 group type requires 2-4 nodes');
-    Add('error_group_3x3=3x3 group type requires 5-9 nodes');
+    Add('error_group_2x2=2x2 group type requires 1-4 nodes');
+    Add('error_group_3x3=3x3 group type requires 1-9 nodes');
     Add('confirm_delete_node=Delete node "%s"?');
     Add('confirm_delete_group=Delete group "%s"?');
     Add('title_confirm=Confirm');

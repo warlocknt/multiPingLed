@@ -41,7 +41,7 @@ type
     function Intern(const TableName, ColumnName, Value: string): Int64;
     procedure ProcessJob(const Job: THistoryJob);
     procedure ProcessConfig(const Job: THistoryJob);
-    procedure RecordState(var Row: TObservedTotals; State: TNodeState; AtMS: Int64);
+    procedure RecordState(var Row: TObservedTotals; State: TNodeState; AtMS: Int64; CountOutage: Boolean = True);
     procedure AccountTo(var Row: TObservedTotals; AtMS: Int64);
     procedure CloseRow(var Row: TObservedTotals; AtMS: Int64);
     procedure FlushTotals(AtMS: Int64);
@@ -283,10 +283,10 @@ begin
   case Row.State of nsUp:Inc(Row.UpMS,Delta);nsDown:Inc(Row.DownMS,Delta);else Inc(Row.UnknownMS,Delta);end;
   Row.LastAt:=AtMS;
 end;
-procedure TSessionHistory.RecordState(var Row:TObservedTotals;State:TNodeState;AtMS:Int64);
+procedure TSessionHistory.RecordState(var Row:TObservedTotals;State:TNodeState;AtMS:Int64;CountOutage:Boolean);
 begin
   AtMS:=Later(AtMS,Row.LastAt);AccountTo(Row,AtMS);
-  Row.State:=State;if State=nsDown then Inc(Row.Outages);
+  Row.State:=State;if CountOutage and (State=nsDown) then Inc(Row.Outages);
   FDB.Exec('INSERT INTO state_events(node_id,at_ms,state) VALUES('+IntToStr(Row.RowID)+','+IntToStr(AtMS)+','+IntToStr(Ord(State))+');');
 end;
 procedure TSessionHistory.CloseRow(var Row:TObservedTotals;AtMS:Int64);
@@ -296,7 +296,22 @@ begin
 end;
 procedure TSessionHistory.ProcessConfig(const Job:THistoryJob);
 var I,J,N:Integer;Found:Boolean;HostID,NameID:Int64;
+    PreviousStates:array of TNodeState;
 begin
+  // Preserve only continuous observations of the same target. Closed rows
+  // from an earlier monitoring period must not restore a stale state.
+  SetLength(PreviousStates,Length(Job.Nodes));
+  for J:=0 to High(Job.Nodes) do
+  begin
+    PreviousStates[J]:=nsUnknown;
+    for I:=0 to High(FRows) do
+      if FRows[I].Active and (FRows[I].Node.ID=Job.Nodes[J].ID) and
+        (FRows[I].Node.Host=Job.Nodes[J].Host) then
+      begin
+        PreviousStates[J]:=FRows[I].State;
+        Break;
+      end;
+  end;
   for I:=0 to High(FRows) do
     if FRows[I].Active then
     begin
@@ -317,7 +332,8 @@ begin
     N:=Length(FRows);SetLength(FRows,N+1);FRows[N].Node:=Job.Nodes[I];FRows[N].RowID:=FDB.LastID;
     FRows[N].Active:=True;FRows[N].LastAt:=Job.AtMS;FRows[N].State:=nsUnknown;
     FDB.Exec('INSERT INTO node_totals(node_id) VALUES('+IntToStr(FRows[N].RowID)+');');
-    RecordState(FRows[N],nsUnknown,Job.AtMS);
+    // Initial state of a name segment does not count as a new outage.
+    RecordState(FRows[N],PreviousStates[I],Job.AtMS,False);
   end;
 end;
 procedure TSessionHistory.ProcessJob(const Job:THistoryJob);
